@@ -9,6 +9,7 @@ import { useCountUp } from '../hooks/useCountUp';
 import { CourseMark } from '../components/CourseMark';
 import { Reveal } from '../components/Reveal';
 import { Modal } from '../components/Modal';
+import HoldButton from '../components/reactbits/HoldButton';
 
 const WEEKS = 18;
 
@@ -346,10 +347,24 @@ export const ProfilePage = () => {
             <li>Code you wrote in lesson workspaces, and video positions</li>
             <li>Items in your cart</li>
           </ul>
-          <p className="confirm-warn">This cannot be undone. Courses you bought will need to be enrolled in again. Your account and login stay as they are.</p>
+          <p className="confirm-warn">Press and hold the red button for 2 seconds to confirm. This cannot be undone. Courses you bought will need to be enrolled in again. Your account and login stay as they are.</p>
           <div className="confirm-actions">
             <button className="btn btn-secondary" onClick={() => setFinalReset(false)} data-autofocus>Keep my data</button>
-            <button className="btn btn-danger" onClick={() => { resetAllDemoData(); setFinalReset(false); }}>Delete permanently</button>
+            <HoldButton
+              className="confirm-hold"
+              size="sm"
+              radius={8}
+              holdTime={2000}
+              resetAfter={0}
+              backgroundColor="color-mix(in srgb, var(--accent-rose) 12%, var(--bg-card))"
+              textColor="var(--accent-rose)"
+              fillColor="var(--accent-rose)"
+              fillTextColor="#ffffff"
+              doneLabel="Deleted"
+              onHold={() => setTimeout(() => { resetAllDemoData(); setFinalReset(false); }, 700)}
+            >
+              Hold to delete permanently
+            </HoldButton>
           </div>
         </div>
       </Modal>

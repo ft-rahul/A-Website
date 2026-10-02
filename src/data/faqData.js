@@ -1,48 +1,54 @@
 export const faqData = [
   {
-    question: 'Do I need programming experience?',
+    question: 'I’ve never written code. Is this for me?',
     answer:
-      'No. Full-Stack Web Development, Frontend Development, Java Development and the Git and Linux courses all start from the beginning. DevOps, React and Node.js assume you can already write some code.'
+      'Yes. Start with Full-Stack Web Development — it begins at zero. Frontend Development, Java Development, Git and Linux also start from the beginning. DevOps, React and Node.js expect you to know some code already, and their course pages say so.'
+  },
+  {
+    question: 'Do I need to install anything?',
+    answer:
+      'Not to start. HTML, CSS and JavaScript lessons run right in your browser — you type the code and see the result instantly. Java, SQL, shell and Docker need real tools on a computer, so in the browser those lessons explain the code line by line instead of running it.'
+  },
+  {
+    question: 'Will this get me a job?',
+    answer:
+      'We can’t promise that, and you should be careful with anyone who does. Most people need several months of steady practice and a few projects they built themselves. What we promise is that you’ll understand what you build — and every core course ends with real projects you can show.'
+  },
+  {
+    question: 'What happens when I get stuck?',
+    answer:
+      'Hover the line you don’t understand and the Tutor explains what it does, why it’s written that way and what happens next. If it doesn’t recognise a line, it tells you instead of guessing. You can also ask the assistant about your code inside any lesson.'
   },
   {
     question: 'Is this a subscription?',
-    answer: 'No. Each course is a one-time purchase with lifetime access to its lessons, exercises and future updates.'
+    answer: 'No. You pay once per course and keep it for life, including future updates. Nothing renews.'
   },
   {
-    question: 'What does the Tutor actually explain?',
-    answer:
-      'Place your cursor on any line in the lesson workspace and the Tutor explains what the code says, what the browser or runtime does when it executes, why it is written that way, and what happens next. Explanations come from lesson notes written for that line or from Monklogy’s library of recognised language constructs. If a line is not recognised, the Tutor says so instead of guessing.'
+    question: 'What if it’s not right for me?',
+    answer: 'Try the first lesson of any course for free first. If you buy a course and it isn’t for you, ask for a refund within 30 days.'
   },
   {
-    question: 'Can I run the code?',
-    answer:
-      'HTML, CSS and JavaScript lessons run live in a sandboxed preview with a console. Java, SQL, shell, Docker and server-side Node.js need a real runtime, so those files are explained line by line but not executed in the browser.'
-  },
-  {
-    question: 'What is the refund policy?',
-    answer: 'If a course is not right for you, ask for a refund within 30 days of purchase.'
-  },
-  {
-    question: 'Where is my progress stored?',
-    answer: 'In this prototype, enrolments, progress and notes are stored in your browser. Clearing site data resets them.'
+    question: 'Where is my progress saved?',
+    answer: 'In your account — your code, notes and progress. Sign in on any device and carry on where you stopped.'
   }
 ];
 
+// "The honest part": a hard truth about learning to code, and what we do about it.
 export const principles = [
   {
-    title: 'Understand, then memorise',
-    description: 'Syntax is easy to look up. What lasts is knowing what the machine does with it, so every lesson explains the mechanism.'
+    title: 'Watching videos won’t make you a developer.',
+    description: 'Every lesson has a workspace under the video. You write the code yourself, and most lessons check your answer when you press Run.'
   },
   {
-    title: 'Practise beside the lesson',
-    description: 'Watching creates a feeling of progress. Writing code creates progress. The workspace sits under every video.'
+    title: 'You will get stuck. Everyone does.',
+    description: 'Hover any line and the Tutor explains it in plain English. When it doesn’t know, it says so instead of guessing.'
   },
   {
-    title: 'Honest about the tools',
-    description: 'If something runs in your browser, it really runs. If it needs a server or a JVM, we explain it rather than pretend.'
+    title: 'It takes months, not a weekend.',
+    description: 'Lessons are short and your place is saved, so ten minutes a day still counts. You own the course forever — no deadline.'
   },
   {
-    title: 'Respect for your time',
-    description: 'Lessons are as long as the idea needs. No filler, no countdown timers, no subscription traps.'
+    title: 'A certificate won’t get you hired. Projects will.',
+    description: 'The core courses end with real projects you build, deploy and can show to anyone.'
   }
 ];

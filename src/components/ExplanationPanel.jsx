@@ -1,53 +1,33 @@
 import React, { useState } from 'react';
-import { BookOpenCheck, ScanLine, Braces, HelpCircle, AlertTriangle, CornerDownRight, X, Eye, Lightbulb } from 'lucide-react';
-import { LANGUAGE_LABELS } from '../lib/explain';
-
-const SOURCE = {
-  lesson: { label: 'Lesson note', icon: BookOpenCheck, hint: 'Written by the course author for this exact line.' },
-  pattern: { label: 'Recognised pattern', icon: ScanLine, hint: 'Matched against Monklogy’s library of language constructs.' },
-  structure: { label: 'Structure', icon: Braces, hint: 'Blank lines, comments and brackets.' },
-  unknown: { label: 'Not recognised', icon: HelpCircle, hint: 'Monklogy does not guess when it does not recognise a line.' }
-};
+import { AlertTriangle, CornerDownRight, X, ChevronDown } from 'lucide-react';
 
 const RUNTIME_LABEL = {
-  javascript: 'What the JavaScript runtime does',
+  javascript: 'When it runs',
   html: 'What the browser does',
   css: 'What the browser does',
-  java: 'What the compiler and JVM do',
-  shell: 'What the shell and system do',
+  java: 'When it runs',
+  shell: 'When you run it',
   dockerfile: 'What Docker does',
-  yaml: 'What happens when it runs',
+  yaml: 'When it runs',
   sql: 'What the database does'
 };
 
-export const ExplanationPanel = ({ explanation, rangeItems, language, fileName, previewing, onJump, onClose, quiz = false, pinned = false }) => {
+export const ExplanationPanel = ({ explanation, rangeItems, language, onJump, onClose }) => {
   const isRange = rangeItems && rangeItems.length > 1;
 
   return (
     <section className="explain" aria-labelledby="explain-heading">
-      <header className="explain-head">
-        <h2 id="explain-heading" className="explain-eyebrow">Behind the scenes</h2>
-        <span className="explain-loc mono">
-          {isRange
-            ? `Lines ${rangeItems[0].lineNumber}–${rangeItems[rangeItems.length - 1].lineNumber}`
-            : explanation
-            ? `Line ${explanation.lineNumber}`
-            : ''}
-          {' · '}
-          {fileName}
-          {pinned ? <span className="explain-pinned"> · pinned</span> : previewing && <span className="explain-preview"> · preview</span>}
-        </span>
-        {onClose && (
-          <button className="icon-btn is-quiet explain-close" onClick={onClose} aria-label="Close Behind the scenes" title="Close">
-            <X size={14} />
-          </button>
-        )}
-      </header>
+      <h2 id="explain-heading" className="sr-only">What this line does</h2>
+      {onClose && (
+        <button className="icon-btn is-quiet explain-close" onClick={onClose} aria-label="Close the explanation" title="Close">
+          <X size={14} />
+        </button>
+      )}
 
       {isRange ? (
         <div className="explain-range">
           <p className="explain-range-intro">
-            {rangeItems.length} lines selected. Choose one to see what it does in detail.
+            {rangeItems.length} lines selected. Pick one to see what it does.
           </p>
           <ol className="explain-range-list">
             {rangeItems.map((item) => (
@@ -62,38 +42,29 @@ export const ExplanationPanel = ({ explanation, rangeItems, language, fileName, 
           </ol>
         </div>
       ) : explanation ? (
-        <ExplanationBody key={`${explanation.lineNumber}-${explanation.title}-${quiz}`} explanation={explanation} language={language} quiz={quiz} />
+        <ExplanationBody key={`${explanation.lineNumber}-${explanation.title}`} explanation={explanation} language={language} />
       ) : (
-        <p className="explain-empty">Place your cursor on any line in the editor to see what it does.</p>
+        <p className="explain-empty">Hover or click any line of code to see what it does.</p>
       )}
 
-      <footer className="explain-foot">
-        Explanations come from lesson notes and recognised {LANGUAGE_LABELS[language] || ''} patterns. Monklogy reads your
-        code as text — it does not run an AI model or inspect your program while it executes.
-      </footer>
     </section>
   );
 };
 
-const ExplanationBody = ({ explanation: e, language, quiz }) => {
-  const [revealed, setRevealed] = useState(false);
-  const hide = quiz && !revealed;
-  const src = SOURCE[e.source] || SOURCE.pattern;
-  const Icon = src.icon;
-  const sections = [
-    ['What the code says', e.says],
-    [RUNTIME_LABEL[language] || 'What happens at runtime', e.runtime],
+const ExplanationBody = ({ explanation: e, language }) => {
+  const [more, setMore] = useState(false);
+  const detail = [
+    [RUNTIME_LABEL[language] || 'When it runs', e.runtime],
     ['Why it’s written this way', e.why],
     ['What happens next', e.next]
   ].filter(([, text]) => text);
+  const extra = detail.length || e.analogy || (e.notes || []).some(Boolean) || (e.tags || []).length;
 
   return (
-    <div className="explain-body" key={`${e.lineNumber}-${e.title}`}>
+    <div className="explain-body">
       <pre className="explain-code"><code>{e.code.trim() || ' '}</code></pre>
-      <div className={`explain-source is-${e.source}`} title={src.hint}>
-        <Icon size={13} aria-hidden="true" /> {src.label}
-      </div>
       <h3 className="explain-title" aria-live="polite">{e.title}</h3>
+      {e.says && <p className="explain-lead">{e.says}</p>}
 
       {e.warning && (
         <p className="explain-warning" role="note">
@@ -101,36 +72,31 @@ const ExplanationBody = ({ explanation: e, language, quiz }) => {
         </p>
       )}
 
-      <dl className="explain-sections">
-        {(hide ? sections.slice(0, 1) : sections).map(([label, text]) => (
-          <div key={label} className="explain-section">
-            <dt>{label}</dt>
-            <dd>{text}</dd>
-          </div>
-        ))}
-      </dl>
-
-      {hide && sections.length > 1 && (
-        <div className="explain-predict">
-          <p><Lightbulb size={14} aria-hidden="true" /> <strong>Predict first.</strong> {RUNTIME_LABEL[language] ? `${RUNTIME_LABEL[language].replace(/^What /, 'What do you think ')} with this line?` : 'What happens when this line runs?'} Say it out loud, then check.</p>
-          <button className="btn btn-sm btn-secondary" onClick={() => setRevealed(true)}><Eye size={14} /> Reveal</button>
-        </div>
+      {more && detail.length > 0 && (
+        <dl className="explain-sections">
+          {detail.map(([label, text]) => (
+            <div key={label} className="explain-section">
+              <dt>{label}</dt>
+              <dd>{text}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
-      {!hide && e.analogy && (
+      {more && e.analogy && (
         <aside className="explain-analogy">
-          <span className="explain-analogy-label">Real-world analogy</span>
+          <span className="explain-analogy-label">Think of it like</span>
           <p>{e.analogy}</p>
         </aside>
       )}
 
-      {(e.notes || []).filter(Boolean).map((n) => (
+      {more && (e.notes || []).filter(Boolean).map((n) => (
         <p key={n} className="explain-note">
           <CornerDownRight size={13} aria-hidden="true" /> {n}
         </p>
       ))}
 
-      {e.tags && e.tags.length > 0 && (
+      {more && e.tags && e.tags.length > 0 && (
         <div className="explain-tags">
           <span className="explain-tags-label">Also on this line</span>
           <ul>
@@ -143,6 +109,12 @@ const ExplanationBody = ({ explanation: e, language, quiz }) => {
           </ul>
         </div>
       )}
+
+      {extra ? (
+        <button className={`explain-more ${more ? 'is-open' : ''}`} onClick={() => setMore((m) => !m)} aria-expanded={more}>
+          {more ? 'Show less' : 'Tell me more'} <ChevronDown size={14} aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 };

@@ -213,3 +213,17 @@ kbd {
   }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ── Theme switch ──────────────────────────────────────────── */
+/* The new theme is revealed by a growing circle (see toggleTheme); skip the
+   default cross-fade and per-element colour transitions while it runs. */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
+.theme-switching body, .theme-switching body * { transition-property: none !important; }
+.theme-switching .theme-icon > svg { transition-property: transform, opacity !important; }
+/* fallback for browsers without View Transitions: a soft colour fade */
+.theme-fading body, .theme-fading body *, .theme-fading body *::before, .theme-fading body *::after {
+  transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease, fill 0.45s ease, box-shadow 0.45s ease !important;
+}

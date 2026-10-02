@@ -15,7 +15,7 @@ const countNewlines = (s) => {
  * hovering a line number previews that line without moving the cursor.
  */
 export const CodeEditor = forwardRef(function CodeEditor(
-  { value, onChange, fileName, onCursorChange, onHoverLine, label, describedBy, lineHeight = LINE_HEIGHT, diagnostics = [], hoverText = false, markLine = null },
+  { value, onChange, fileName, onCursorChange, onHoverLine, label, describedBy, lineHeight = LINE_HEIGHT, diagnostics = [], hoverText = false, markLine = null, marks = [] },
   ref
 ) {
   const textRef = useRef(null);
@@ -157,6 +157,14 @@ export const CodeEditor = forwardRef(function CodeEditor(
             style={{ transform: `translateY(${PAD_TOP + markLine * lineHeight - scroll.top}px)`, height: `${lineHeight}px` }}
           />
         )}
+        {marks.map((m) => (
+          <div
+            key={`mark-${m}`}
+            className="editor-linked"
+            aria-hidden="true"
+            style={{ transform: `translateY(${PAD_TOP + m * lineHeight - scroll.top}px)`, height: `${lineHeight}px` }}
+          />
+        ))}
         {hoverText && hovered !== null && (
           <div
             className="editor-hover"

@@ -4,17 +4,13 @@ import { TerminalSquare, Trash2, CircleCheck, CircleAlert, Loader2 } from 'lucid
 /** Exit-status pill(s) for a run: ready · running… · exit 0 · exit 1 (+ warnings). */
 export const TerminalStatus = ({ status }) => {
   const pill = {
-    idle: { cls: 'is-idle', icon: null, text: 'ready' },
-    running: { cls: 'is-running', icon: <Loader2 size={12} className="spin" />, text: 'running…' },
-    ok: { cls: 'is-ok', icon: <CircleCheck size={12} />, text: `exit 0 · ${status.ms ?? 0} ms` },
-    failed: { cls: 'is-failed', icon: <CircleAlert size={12} />, text: `exit 1 · ${status.errors} error${status.errors === 1 ? '' : 's'}` }
-  }[status.state] || { cls: 'is-idle', text: 'ready' };
-  return (
-    <>
-      <span className={`term-pill mono ${pill.cls}`} role="status">{pill.icon}{pill.text}</span>
-      {status.warnings > 0 && <span className="term-pill mono is-warn">{status.warnings} warning{status.warnings === 1 ? '' : 's'}</span>}
-    </>
-  );
+    idle: { cls: 'is-idle', icon: null, text: 'Not run yet' },
+    running: { cls: 'is-running', icon: <Loader2 size={12} className="spin" />, text: 'Running…' },
+    ok: { cls: 'is-ok', icon: <CircleCheck size={12} />, text: 'It worked' },
+    failed: { cls: 'is-failed', icon: <CircleAlert size={12} />, text: status.errors === 1 ? '1 thing to fix' : `${status.errors} things to fix` }
+  }[status.state] || { cls: 'is-idle', text: 'Not run yet' };
+  // Plain words for learners; warnings are shown in the editor instead
+  return <span className={`term-pill ${pill.cls}`} role="status">{pill.icon}{pill.text}</span>;
 };
 
 /**

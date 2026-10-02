@@ -231,6 +231,119 @@
   transition: box-shadow var(--transition-fast);
 }
 .avatar-btn:hover, .avatar-btn.is-active { box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--brand-primary); }
+
+/* Theme icon: sun (light) and moon (dark) share one spot. Going dark the sun turns
+   left into the moon; going light the moon turns right into the sun. */
+.theme-icon { position: relative; width: 16px; height: 16px; }
+.theme-icon > svg {
+  position: absolute;
+  inset: 0;
+  transition:
+    transform 0.65s cubic-bezier(0.65, 0, 0.35, 1),
+    opacity 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.theme-icon.is-light .theme-icon-sun,
+.theme-icon.is-dark .theme-icon-moon { transform: rotate(0) scale(1); opacity: 1; }
+.theme-icon.is-dark .theme-icon-sun { transform: rotate(-180deg) scale(0.4); opacity: 0; }
+.theme-icon.is-light .theme-icon-moon { transform: rotate(180deg) scale(0.4); opacity: 0; }
+
+/* Nav pills: icon-only at rest, slide open to reveal a label on hover/focus. */
+.nav-pill {
+  --pill-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --pill-dur: 0.42s;
+  width: auto;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  transition:
+    color var(--pill-dur) var(--pill-ease),
+    background-color var(--pill-dur) var(--pill-ease),
+    border-color var(--pill-dur) var(--pill-ease),
+    box-shadow var(--pill-dur) var(--pill-ease),
+    transform 0.2s var(--pill-ease);
+}
+.nav-pill:active { transform: scale(0.96); }
+.nav-pill-icon {
+  display: inline-flex;
+  transition: transform var(--pill-dur) var(--pill-ease);
+}
+.nav-pill-label {
+  display: grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-columns var(--pill-dur) var(--pill-ease),
+    opacity 0.25s ease,
+    margin-left var(--pill-dur) var(--pill-ease);
+  margin-left: 0;
+}
+.nav-pill-label > span {
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transform: translateX(-6px);
+  transition: transform var(--pill-dur) var(--pill-ease);
+}
+
+@media (hover: hover) {
+  .nav-pill:is(:hover, :focus-visible) .nav-pill-label {
+    grid-template-columns: 1fr;
+    opacity: 1;
+    margin-left: 0.45rem;
+    transition:
+      grid-template-columns var(--pill-dur) var(--pill-ease),
+      opacity 0.3s ease 0.08s,
+      margin-left var(--pill-dur) var(--pill-ease);
+  }
+  .nav-pill:is(:hover, :focus-visible) .nav-pill-label > span { transform: none; }
+
+
+  .nav-pill.is-cart:is(:hover, :focus-visible) {
+    background: var(--brand-primary);
+    border-color: var(--brand-primary);
+    color: var(--brand-contrast);
+    box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--brand-primary) 70%, transparent);
+  }
+  .nav-pill.is-cart:is(:hover, :focus-visible) .nav-pill-icon { transform: translateY(-1px) rotate(-8deg); }
+}
+.nav-pill.is-cart .count-badge {
+  box-shadow: 0 0 0 2px var(--bg-primary);
+  transition: transform var(--pill-dur) var(--pill-ease);
+}
+.nav-pill.is-cart:hover .count-badge { transform: scale(1.08); }
+
+.nav-pill.is-profile {
+  padding: 0;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+.nav-pill.is-profile .avatar-btn {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  transition: box-shadow var(--pill-dur) var(--pill-ease);
+}
+.nav-pill.is-profile.is-active .avatar-btn { box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--brand-primary); }
+@media (hover: hover) {
+  .nav-pill.is-profile:is(:hover, :focus-visible) {
+    padding-right: 0.8rem;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+  }
+  .nav-pill.is-profile:is(:hover, :focus-visible) .nav-pill-label { margin-left: 0.55rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-pill, .nav-pill *, .nav-pill-label { transition-duration: 0.01ms !important; }
+}
 .nav-menu-btn { display: none; }
 
 .mobile-nav {
@@ -399,6 +512,8 @@
 .pay-summary dt { color: var(--text-muted); }
 .pay-total { border-top: 1px solid var(--border-color); margin-top: 0.4rem; padding-top: 0.7rem !important; font-weight: 600; font-size: 1.05rem !important; }
 .pay-total dd { font-family: var(--font-mono); }
+.pay-slide { min-height: 52px; }
+.pay-slide .slide-commit { display: block; }
 
 @media (max-width: 420px) {
   .verify-options { grid-template-columns: 1fr; }

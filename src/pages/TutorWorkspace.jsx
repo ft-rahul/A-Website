@@ -3,7 +3,7 @@ import { formatPrice } from '../lib/money';
 import {
   ArrowLeft, PanelLeft, ChevronLeft, ChevronRight, CheckCircle2, Check, Lock, Play, RotateCcw,
   Film, PlayCircle, Terminal, BookOpen, ArrowRight, Sparkles, Cpu, NotebookPen, X, ChevronDown, ChevronUp, MonitorPlay,
-  Trash2, Info, Pin, Brain, BookmarkPlus
+  Trash2, Info, BookmarkPlus, Maximize2, Minimize2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getCourse, getCurriculum, summarizeProgress } from '../data/catalog';
@@ -14,12 +14,14 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { diagnose, engineSyntaxError } from '../lib/diagnostics';
 import { Terminal as TerminalPanel, TerminalStatus } from '../components/Terminal';
 import { buildDocument } from '../lib/sandbox';
+import { lensTarget } from '../lib/lens';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { CodeEditor } from '../components/CodeEditor';
 import { ExplanationPanel } from '../components/ExplanationPanel';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 import { CourseMark } from '../components/CourseMark';
 import { NotesDrawer } from '../components/NotesDrawer';
+import CardNav from '../components/reactbits/CardNav';
 import { AssistantPanel } from '../components/AssistantPanel';
 import { BtsSimulation, hasSimulation } from '../components/BtsSimulation';
 
@@ -32,8 +34,14 @@ const READ_MODE_REASON = {
   javascript: 'This file needs Node.js or a build step (for example JSX), so it cannot run in the browser sandbox.'
 };
 
-const SPLIT_LIMITS = { video: [0.28, 0.72], editor: [0.3, 0.75] };
+const SPLIT_LIMITS = { video: [0.12, 0.88], editor: [0.2, 0.8] };
 const SPLIT_DEFAULT = { video: 0.5, editor: 0.55 };
+// Card colours for the Ask / Explain / Notes menu (warm inks that read in both themes)
+const RAIL_CARD = {
+  assistant: { bg: '#1f1c19', fg: '#f6f0e7', hint: 'Ask about your code' },
+  bts: { bg: '#3a2a1f', fg: '#fbeee2', hint: 'What a line does' },
+  notes: { bg: '#2c2a26', fg: '#f3eee6', hint: 'Your lesson notes' }
+};
 
 const loadSavedCode = getSavedCode;
 
@@ -45,6 +53,38 @@ const KeyPoints = ({ text }) => {
     <ul className="keypoints">
       {items.map((l, i) => <li key={i}>{inline(l.replace(/^[-*]\s*/, ''))}</li>)}
     </ul>
+  );
+};
+
+/* Short, plain-language card shown over the preview while a line is hovered. */
+const LensCard = ({ explanation: e, lens, info, stale, fileName, language }) => {
+  let status;
+  if (stale) status = { tone: 'warn', text: 'You changed this file since the last run — press Run to update the preview.' };
+  else if (!lens) {
+    status = language === 'javascript' && /console\.\w+\(/.test(e.code)
+      ? { tone: 'muted', text: 'Its output appears in the Terminal tab.' }
+      : { tone: 'muted', text: 'This line doesn’t point at anything you can see on the page.' };
+  } else if (!info) status = null;
+  else if (info.count === 0) status = { tone: 'warn', text: `Nothing on the page matches ${lens.label} yet.` };
+  else {
+    const n = `${info.count} element${info.count === 1 ? '' : 's'}`;
+    const hidden = info.count - info.visible;
+    status = {
+      tone: 'ok',
+      text: `${lens.detail ? `${lens.detail} → applies to ${n}` : `Highlighted: ${info.count === 1 && info.first ? info.first : n}`}${hidden ? ` (${hidden} not visible)` : ''}`
+    };
+  }
+  return (
+    <div className="lens-card" aria-live="polite">
+      <div className="lens-head mono">
+        <span className="lens-ln">Line {e.lineNumber}</span>
+        <span className="lens-file">{fileName}</span>
+      </div>
+      <code className="lens-code">{e.code.trim()}</code>
+      <strong className="lens-title">{e.title}</strong>
+      {(e.runtime || e.says) && <p className="lens-text">{e.runtime || e.says}</p>}
+      {status && <p className={`lens-status is-${status.tone}`}><span className="lens-dot" aria-hidden="true" />{status.text}</p>}
+    </div>
   );
 };
 
@@ -161,7 +201,10 @@ const Workspace = ({ course }) => {
   const [activeFileId, setActiveFileId] = useState(workspace.files[0].id);
   const [cursor, setCursor] = useState({ start: 0, end: 0 });
   const [hoverLine, setHoverLine] = useState(null);
-  const [pinLine, setPinLine] = useState(null); // Behind the scenes: a line held for study
+  // The line being explained stays put after the mouse leaves the editor (so you can
+  // move to the Explain panel and read it); clicking or typing in the editor moves on.
+  const [pinLine, setPinLine] = useState(null);
+  useEffect(() => { if (hoverLine !== null) setPinLine(hoverLine); }, [hoverLine]);
   useEffect(() => setPinLine(null), [activeFileId]);
   const editorRef = useRef(null);
 
@@ -206,7 +249,10 @@ const Workspace = ({ course }) => {
       : null),
     [activeFile.code, activeFile.language, safeStart, safeEnd, workspace.annotations]
   );
-  const onCursorChange = useCallback((r) => setCursor((c) => (c.start === r.start && c.end === r.end ? c : r)), []);
+  const onCursorChange = useCallback((r) => {
+    setPinLine(null);
+    setCursor((c) => (c.start === r.start && c.end === r.end ? c : r));
+  }, []);
 
   // ── Diagnostics, run pipeline and terminal ───────────────
   const iframeRef = useRef(null);
@@ -322,8 +368,9 @@ const Workspace = ({ course }) => {
     }
 
     r.htmlCssErrors = staticErrors;
-    const doc = buildDocument(files, r.id);
+    const doc = buildDocument(files, r.id, { lens: true });
     r.jsStartLine = doc.jsStartLine;
+    r.ranCode = Object.fromEntries(files.map((f) => [f.id, f.code]));
     setSrcDoc(doc.html);
     // Completion arrives as a "done" message; a timeout guards against infinite loops.
     r.timer = setTimeout(() => {
@@ -365,6 +412,10 @@ const Workspace = ({ course }) => {
         r.runtimeErrors += 1;
         print({ type: 'error', text: d.text, loc: toLoc() });
         if (runStatusRef.current !== 'running') setRunStatus((s) => ({ ...s, state: 'failed', errors: (s.errors || 0) + 1 }));
+        return;
+      }
+      if (d.type === 'lens') {
+        if (d.id === lensReq.current) setLensInfo({ count: d.count, visible: d.visible, first: d.first });
         return;
       }
       if (d.type === 'result') return print({ type: 'result', text: d.text });
@@ -550,6 +601,55 @@ const Workspace = ({ course }) => {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
+  // ── Full screen: code editor + preview fill the whole screen ──
+  const [full, setFull] = useState(false);
+  const toggleFull = () => {
+    const el = bottomRef.current;
+    if (!el) return;
+    if (full) {
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      setFull(false);
+    } else if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => setFull(true)); // fall back to filling the window
+    } else setFull(true);
+  };
+  useEffect(() => {
+    const onChange = () => setFull(document.fullscreenElement === bottomRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape' && !document.fullscreenElement) setFull(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full]);
+
+  // ── Right panel width: drag its left edge ──
+  const RAIL_MIN = 320;
+  const RAIL_MAX = 760;
+  const [railW, setRailW] = useState(() => storage.get('rail_width', 420));
+  useEffect(() => storage.set('rail_width', railW), [railW]);
+  const startRailDrag = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const move = (ev) => setRailW(Math.round(Math.min(RAIL_MAX, Math.max(RAIL_MIN, window.innerWidth - ev.clientX))));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.classList.remove('is-resizing-col', 'is-resizing-rail');
+    };
+    document.body.classList.add('is-resizing-col', 'is-resizing-rail');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const railKeys = (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      setRailW((w) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, w + (e.key === 'ArrowLeft' ? 20 : -20))));
+    }
+  };
+
   const splitKeys = (part) => (e) => {
     const dec = part === 'video' ? 'ArrowUp' : 'ArrowLeft';
     const inc = part === 'video' ? 'ArrowDown' : 'ArrowRight';
@@ -582,13 +682,42 @@ const Workspace = ({ course }) => {
   );
 
   // ── Console: terminal or preview ─────────────────────────
-  const [consoleTab, setConsoleTab] = useState('terminal');
-  useEffect(() => { if (!webMode) setConsoleTab('terminal'); }, [webMode]);
+  // Web lessons open on the page itself; the terminal comes forward when something fails
+  const [consoleTab, setConsoleTab] = useState(webMode ? 'preview' : 'terminal');
+
+  // ── Lens: hover a line → see what it does on the running page ──
+  // While a line is hovered the preview comes forward, the elements that line
+  // affects are highlighted, and a short card explains it.
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    if (!webMode || hoverLine === null) { setPeek(false); return undefined; }
+    const t = setTimeout(() => setPeek(true), 160); // ignore the mouse just passing over
+    return () => clearTimeout(t);
+  }, [webMode, hoverLine]);
+  const shownTab = peek && !compileErrors ? 'preview' : consoleTab;
+  const lensOn = peek && shownTab === 'preview';
+  const lens = useMemo(
+    () => (webMode && focusTarget !== null ? lensTarget({ code: activeFile.code, lineIndex: safeStart, language: activeFile.language }) : null),
+    [webMode, focusTarget, activeFile.code, activeFile.language, safeStart]
+  );
+  const lensStale = Boolean(runRef.current.ranCode) && runRef.current.ranCode[activeFile.id] !== activeFile.code;
+  const lensReq = useRef(0);
+  const [lensInfo, setLensInfo] = useState(null);
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    lensReq.current += 1;
+    setLensInfo(null);
+    const target = lensOn && lens && !(lensStale && lens.line) ? lens : {};
+    win.postMessage({ __monklogyLens: true, id: lensReq.current, run: runRef.current.id, line: target.line, selector: target.selector }, '*');
+  }, [lensOn, lens?.line, lens?.selector, lensStale, frame.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setConsoleTab(webMode ? 'preview' : 'terminal'), [webMode, lesson.id]);
   // A failed run is only useful if you can read why: bring the terminal forward
   useEffect(() => { if (runStatus.state === 'failed') setConsoleTab('terminal'); }, [runStatus.state, runStatus.errors]);
-  const [taskOpen, setTaskOpen] = useState(false);
+  // The task is the first thing a learner needs, so it starts open on every lesson
+  const [taskOpen, setTaskOpen] = useState(true);
   const [readInfo, setReadInfo] = useState(false);
-  useEffect(() => { setTaskOpen(false); setReadInfo(false); }, [lesson.id]);
+  useEffect(() => { setTaskOpen(true); setReadInfo(false); }, [lesson.id]);
 
   // ── What the assistant sees ──────────────────────────────
   const getAssistantContext = () => ({
@@ -616,16 +745,16 @@ const Workspace = ({ course }) => {
   };
 
   const railTabs = [
-    { id: 'assistant', label: 'Assistant', icon: <Sparkles size={15} /> },
-    { id: 'bts', label: 'Behind the scenes', short: 'Explain', icon: <Cpu size={15} /> },
-    { id: 'notes', label: 'Notes', icon: <NotebookPen size={15} /> }
+    { id: 'assistant', label: 'Ask', title: 'Ask the assistant about your code', icon: <Sparkles size={15} /> },
+    { id: 'bts', label: 'Explain', title: 'Explain the line you hover or select', icon: <Cpu size={15} /> },
+    { id: 'notes', label: 'Notes', title: 'Your notes for this lesson', icon: <NotebookPen size={15} /> }
   ];
   // ── Behind the scenes: study tools ───────────────────────
   const codeLines = useMemo(() => activeFile.code.split('\n'), [activeFile.code]);
   const simBefore = useMemo(() => codeLines.slice(0, safeStart), [codeLines, safeStart]);
   const showSim = hasSimulation(activeFile.language) && !(rangeItems && focusTarget === null);
-  const [quiz, setQuiz] = useState(() => storage.get('bts_quiz', false));
-  useEffect(() => storage.set('bts_quiz', quiz), [quiz]);
+  const [simOpen, setSimOpen] = useState(() => storage.get('bts_sim_open', false));
+  useEffect(() => storage.set('bts_sim_open', simOpen), [simOpen]);
   const stepLine = (dir) => {
     let i = safeStart + dir;
     while (i >= 0 && i < lineCount && !codeLines[i].trim()) i += dir;
@@ -674,6 +803,7 @@ const Workspace = ({ course }) => {
           )}
           {accessible && (
             <>
+              {!(railOpen && railDocked) && (
               <div className="tool-dock" role="group" aria-label="Tutor tools">
                 {railTabs.map((t) => {
                   const on = railOpen && railTab === t.id;
@@ -684,14 +814,15 @@ const Workspace = ({ course }) => {
                       onClick={() => toggleRail(t.id)}
                       aria-pressed={on}
                       aria-controls="tutor-rail"
-                      aria-label={t.label}
-                      title={t.label}
+                      title={t.title}
                     >
                       {t.icon}
+                      <span>{t.label}</span>
                     </button>
                   );
                 })}
               </div>
+              )}
               <button
                 className={`icon-btn rail-toggle ${railOpen ? 'is-on' : ''}`}
                 onClick={() => (railOpen ? setRailOpen(false) : openRail(railTab))}
@@ -715,7 +846,7 @@ const Workspace = ({ course }) => {
               {owned ? (
                 <>
                   <div className="meter is-thin"><span style={{ width: `${summary.percent}%` }} /></div>
-                  <div className="tutor-side-meta mono">{summary.percent}% · {summary.completed} of {summary.total}</div>
+                  <div className="tutor-side-meta">{summary.completed} of {summary.total} lessons done</div>
                 </>
               ) : (
                 <div className="tutor-side-meta mono">Preview — enrol to unlock all lessons</div>
@@ -725,7 +856,7 @@ const Workspace = ({ course }) => {
           <nav className="tutor-side-list">
             {modules.map((m) => (
               <div key={m.id} className="tutor-module">
-                <div className="tutor-module-title mono">{m.title}</div>
+                <div className="tutor-module-title">{m.title}</div>
                 <ol>
                   {m.lessons.map((l) => {
                     const can = owned || l.preview;
@@ -800,8 +931,8 @@ const Workspace = ({ course }) => {
 
                 <div
                   ref={bottomRef}
-                  className="studio-bottom"
-                  style={stacked ? undefined : { gridTemplateColumns: `minmax(0, ${split.editor}fr) 16px minmax(0, ${1 - split.editor}fr)` }}
+                  className={`studio-bottom ${full ? 'is-full' : ''}`}
+                  style={stacked && !full ? undefined : { gridTemplateColumns: `minmax(0, ${split.editor}fr) 16px minmax(0, ${1 - split.editor}fr)` }}
                 >
                   <section className="studio-pane studio-editor" aria-label="Code editor">
                     <div className="practice-bar">
@@ -839,13 +970,27 @@ const Workspace = ({ course }) => {
                             <Play size={14} fill="currentColor" /> Run
                           </button>
                         )}
+                        <button
+                          className={`icon-btn is-quiet full-toggle ${full ? 'is-on' : ''}`}
+                          onClick={toggleFull}
+                          aria-pressed={full}
+                          aria-label={full ? 'Exit full screen' : 'Full screen: code and preview'}
+                          title={full ? 'Exit full screen (Esc)' : 'Full screen'}
+                        >
+                          {full ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                        </button>
                       </div>
                     </div>
 
                     {taskOpen && (
                       <div id="studio-task" className="studio-task" role="region" aria-label={isSandbox ? 'Practice' : 'Exercise'}>
-                        <span className="studio-task-k mono">{isSandbox ? 'Practice' : 'Exercise'}</span>
+                        <span className="studio-task-k mono">{isSandbox ? 'Practice' : 'Your task'}</span>
                         <p>{workspace.prompt}</p>
+                        <p className="studio-task-tip">
+                          {webMode
+                            ? <>Write it in the editor, then press <strong>Run</strong>. Don’t understand a line? Hover it to see what it does.</>
+                            : <>This code can’t run in the browser. Hover any line to see what it does.</>}
+                        </p>
                         <button className="icon-btn is-quiet" onClick={() => setTaskOpen(false)} aria-label="Close task"><X size={14} /></button>
                       </div>
                     )}
@@ -863,7 +1008,7 @@ const Workspace = ({ course }) => {
                       diagnostics={activeDiagnostics}
                     />
                     <span id="editor-help" className="sr-only">
-                      Hover or move to a line to explain it in Behind the scenes. Select lines for an overview. Tab indents; press Escape then Tab to leave the editor.
+                      Hover a line to see what it does: it is highlighted in the preview and explained in the Explain panel. Select lines for an overview. Tab indents; press Escape then Tab to leave the editor.
                     </span>
                     {(totals.errors > 0 || totals.warnings > 0) && (
                     <div className="problems-bar mono">
@@ -884,19 +1029,19 @@ const Workspace = ({ course }) => {
                     )}
                   </section>
 
-                  {!stacked && splitter('editor', 'Resize editor and terminal')}
+                  {(!stacked || full) && splitter('editor', 'Resize editor and preview')}
 
                   <section className="studio-pane studio-console" aria-label="Terminal and preview">
                     <div className="console-tabs">
                       {webMode ? (
                         <div className="console-tablist" role="tablist" aria-label="Output">
-                          <button role="tab" aria-selected={consoleTab === 'terminal'} className={`console-tab mono ${consoleTab === 'terminal' ? 'is-active' : ''}`} onClick={() => setConsoleTab('terminal')}>
-                            <Terminal size={13} /> Terminal
-                            {runStatus.state === 'failed' && consoleTab !== 'terminal' && <span className="console-dot is-err" aria-label="has errors" />}
-                          </button>
-                          <button role="tab" aria-selected={consoleTab === 'preview'} className={`console-tab mono ${consoleTab === 'preview' ? 'is-active' : ''}`} onClick={() => setConsoleTab('preview')} title="Your page, running in a sandbox">
+                          <button role="tab" aria-selected={shownTab === 'preview'} className={`console-tab mono ${shownTab === 'preview' ? 'is-active' : ''}`} onClick={() => setConsoleTab('preview')} title="The page your code builds">
                             <MonitorPlay size={13} /> Preview
                             {compileErrors && consoleTab !== 'preview' && <span className="console-dot is-err" aria-label="failed to compile" />}
+                          </button>
+                          <button role="tab" aria-selected={shownTab === 'terminal'} className={`console-tab mono ${shownTab === 'terminal' ? 'is-active' : ''}`} onClick={() => setConsoleTab('terminal')}>
+                            <Terminal size={13} /> Output
+                            {runStatus.state === 'failed' && consoleTab !== 'terminal' && <span className="console-dot is-err" aria-label="has errors" />}
                           </button>
                         </div>
                       ) : (
@@ -909,7 +1054,7 @@ const Workspace = ({ course }) => {
                       )}
                       <div className="console-status">
                         <TerminalStatus status={runStatus} />
-                        <button className="icon-btn is-quiet term-clear" onClick={() => setTerm([])} aria-label="Clear terminal (Ctrl+L)" title="Clear (Ctrl+L)"><Trash2 size={13} /></button>
+                        {shownTab === 'terminal' && <button className="icon-btn is-quiet term-clear" onClick={() => setTerm([])} aria-label="Clear terminal (Ctrl+L)" title="Clear (Ctrl+L)"><Trash2 size={13} /></button>}
                       </div>
                     </div>
                     {!webMode && readInfo && (
@@ -933,7 +1078,7 @@ const Workspace = ({ course }) => {
                     )}
 
                     <div className="console-panes">
-                      <div className={`console-pane ${consoleTab === 'terminal' ? 'is-shown' : ''}`} role="tabpanel" aria-label="Terminal" inert={consoleTab !== 'terminal'}>
+                      <div className={`console-pane ${shownTab === 'terminal' ? 'is-shown' : ''}`} role="tabpanel" aria-label="Terminal" inert={shownTab !== 'terminal'}>
                         <TerminalPanel
                           lines={term}
                           status={runStatus}
@@ -946,8 +1091,18 @@ const Workspace = ({ course }) => {
                         />
                       </div>
                       {webMode && (
-                        <div className={`console-pane is-preview ${consoleTab === 'preview' ? 'is-shown' : ''}`} role="tabpanel" aria-label="Preview" inert={consoleTab !== 'preview'}>
+                        <div className={`console-pane is-preview ${shownTab === 'preview' ? 'is-shown' : ''}`} role="tabpanel" aria-label="Preview" inert={shownTab !== 'preview'}>
                           <iframe key={frame.key} ref={iframeRef} className="output-frame" srcDoc={frame.html} title="Live preview of your code" sandbox="allow-scripts allow-modals" />
+                          {lensOn && !compileErrors && explanation && (
+                            <LensCard
+                              explanation={explanation}
+                              lens={lens}
+                              info={lensInfo}
+                              stale={lensStale}
+                              fileName={activeFile.name}
+                              language={activeFile.language}
+                            />
+                          )}
                           {compileErrors && (
                             <div className="compile-overlay" role="alert">
                               <div className="compile-head mono">✖ Failed to compile</div>
@@ -1016,31 +1171,45 @@ const Workspace = ({ course }) => {
             <aside
               id="tutor-rail"
               className={`tutor-rail ${railOpen ? 'is-open' : ''} ${railDocked ? 'is-docked' : 'is-overlay'}`}
+              style={railDocked ? { '--rail-w': `${railW}px` } : undefined}
               aria-label="Tutor tools"
               inert={!railOpen}
             >
+              {railDocked && (
+                <div
+                  className="rail-resize"
+                  role="separator"
+                  tabIndex={0}
+                  aria-orientation="vertical"
+                  aria-label="Resize the side panel"
+                  aria-valuemin={RAIL_MIN}
+                  aria-valuemax={RAIL_MAX}
+                  aria-valuenow={railW}
+                  onPointerDown={startRailDrag}
+                  onKeyDown={railKeys}
+                  onDoubleClick={() => setRailW(420)}
+                  title="Drag to resize · double-click to reset"
+                />
+              )}
               <div className="rail-head">
-                <div className="rail-tabs" role="tablist" aria-label="Tutor tools">
-                  {railTabs.map((t) => (
-                    <button
-                      key={t.id}
-                      role="tab"
-                      id={`rail-tab-${t.id}`}
-                      aria-selected={railTab === t.id}
-                      aria-controls={`rail-panel-${t.id}`}
-                      className={`rail-tab ${railTab === t.id ? 'is-active' : ''}`}
-                      onClick={() => setRailTab(t.id)}
-                    >
-                      {t.icon}
-                      <span className="rail-tab-long">{t.label}</span>
-                      {t.short && <span className="rail-tab-short">{t.short}</span>}
-                    </button>
-                  ))}
-                </div>
-                <button className="icon-btn is-quiet" onClick={() => setRailOpen(false)} aria-label="Close the Tutor panel"><X size={16} /></button>
+                <CardNav
+                  ariaLabel="Tutor tools"
+                  title={<>{railTabs.find((t) => t.id === railTab)?.icon}{railTabs.find((t) => t.id === railTab)?.label}</>}
+                  items={railTabs.map((t) => ({
+                    id: t.id,
+                    label: t.label,
+                    icon: t.icon,
+                    description: RAIL_CARD[t.id].hint,
+                    bgColor: RAIL_CARD[t.id].bg,
+                    textColor: RAIL_CARD[t.id].fg,
+                    active: railTab === t.id,
+                    onSelect: () => setRailTab(t.id)
+                  }))}
+                  actions={<button className="icon-btn is-quiet" onClick={() => setRailOpen(false)} aria-label="Close the Tutor panel"><X size={16} /></button>}
+                />
               </div>
 
-              <div id="rail-panel-assistant" role="tabpanel" aria-labelledby="rail-tab-assistant" className="rail-panel is-assistant" hidden={railTab !== 'assistant'}>
+              <div id="rail-panel-assistant" role="tabpanel" aria-label="Ask" className="rail-panel is-assistant" hidden={railTab !== 'assistant'}>
                 <AssistantPanel
                   threadKey={`${course.id}/${lesson.id}`}
                   getContext={getAssistantContext}
@@ -1048,47 +1217,38 @@ const Workspace = ({ course }) => {
                 />
               </div>
 
-              <div id="rail-panel-bts" role="tabpanel" aria-labelledby="rail-tab-bts" className="rail-panel is-bts" hidden={railTab !== 'bts'}>
-                <div className="study-bar" role="toolbar" aria-label="Study tools">
+              <div id="rail-panel-bts" role="tabpanel" aria-label="Explain" className="rail-panel is-bts" hidden={railTab !== 'bts'}>
+                <div className="study-bar" role="toolbar" aria-label="Line tools">
                   <div className="study-nav">
                     <button className="icon-btn is-quiet" onClick={() => stepLine(-1)} disabled={safeStart <= 0} aria-label="Previous line" title="Previous line"><ChevronUp size={15} /></button>
-                    <span className="study-pos mono" aria-live="polite">Line {safeStart + 1}<span className="muted">/{lineCount}</span></span>
+                    <span className="study-pos mono" aria-live="polite">Line {safeStart + 1}<span className="muted"> of {lineCount}</span></span>
                     <button className="icon-btn is-quiet" onClick={() => stepLine(1)} disabled={safeStart >= lineCount - 1} aria-label="Next line" title="Next line"><ChevronDown size={15} /></button>
                   </div>
-                  <button className={`study-btn ${pinLine !== null ? 'is-on' : ''}`} onClick={() => setPinLine((p) => (p !== null ? null : safeStart))} aria-pressed={pinLine !== null} title="Hold this line while you study it">
-                    <Pin size={13} /> {pinLine !== null ? 'Pinned' : 'Pin'}
-                  </button>
-                  <button className={`study-btn ${quiz ? 'is-on' : ''}`} onClick={() => setQuiz((q) => !q)} aria-pressed={quiz} title="Hide the answer until you have predicted it">
-                    <Brain size={13} /> Predict
-                  </button>
-                  <button className="study-btn" onClick={saveExplanation} disabled={!explanation || !explanation.code.trim()} title="Save this explanation to your lesson notes">
-                    <BookmarkPlus size={13} /> Save
+                  <button className="study-btn" onClick={saveExplanation} disabled={!explanation || !explanation.code.trim()} title="Save this explanation to your notes">
+                    <BookmarkPlus size={13} /> Save to notes
                   </button>
                 </div>
-                {showSim && (
-                  <div className="rail-sim">
-                    <span className="rail-sim-k mono">
-                      Simulation · line {safeStart + 1}{pinLine !== null ? ' · pinned' : hoverLine !== null ? ' · hover' : ''}
-                    </span>
-                    <BtsSimulation line={explanation.code} language={activeFile.language} before={simBefore} showSteps />
-                  </div>
-                )}
                 <ExplanationPanel
                   explanation={explanation}
                   rangeItems={focusTarget === null ? rangeItems : null}
                   language={activeFile.language}
-                  fileName={activeFile.name}
-                  previewing={hoverLine !== null}
-                  pinned={pinLine !== null}
-                  quiz={quiz}
                   onJump={(i) => editorRef.current?.focusLine(i)}
                 />
+                {showSim && explanation?.code.trim() && (
+                  <div className={`rail-sim ${simOpen ? 'is-open' : ''}`}>
+                    <button className="rail-sim-toggle" onClick={() => setSimOpen((o) => !o)} aria-expanded={simOpen}>
+                      <PlayCircle size={15} aria-hidden="true" />
+                      <span>{simOpen ? 'Hide the animation' : 'See it run, step by step'}</span>
+                      <ChevronDown size={14} className="rail-sim-chev" aria-hidden="true" />
+                    </button>
+                    {simOpen && <BtsSimulation line={explanation.code} language={activeFile.language} before={simBefore} showSteps />}
+                  </div>
+                )}
               </div>
 
-              <div id="rail-panel-notes" role="tabpanel" aria-labelledby="rail-tab-notes" className="rail-panel is-notes" hidden={railTab !== 'notes'}>
+              <div id="rail-panel-notes" role="tabpanel" aria-label="Notes" className="rail-panel is-notes" hidden={railTab !== 'notes'}>
                 <NotesDrawer
                   ref={notesRef}
-                  embedded
                   course={course}
                   lesson={lesson}
                   modules={modules}
@@ -1103,8 +1263,6 @@ const Workspace = ({ course }) => {
                   getTime={() => playerRef.current?.getTime()}
                   onSeek={seekVideo}
                   onOpenAt={openLessonAt}
-                  open
-                  onToggle={() => {}}
                 />
               </div>
             </aside>

@@ -1,10 +1,8 @@
-import React, { useMemo, useRef } from 'react';
-import { formatPrice } from '../lib/money';
-import { ArrowRight, ArrowUpRight, Check } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { ArrowRight, ArrowUpRight, Sprout, Download, MessageCircleQuestion, Hammer, Infinity as InfinityIcon, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { courses, getLessonCount } from '../data/catalog';
 import { faqData, principles } from '../data/faqData';
-import { explainLine } from '../lib/explain';
 import { useScrollProgress } from '../hooks/useScroll';
 import { useMediaQuery, usePrefersReducedMotion } from '../hooks/useMediaQuery';
 import { TechMorph } from '../components/TechMorph';
@@ -14,53 +12,65 @@ import { LiveWorkspaceDemo } from '../components/LiveWorkspaceDemo';
 
 const FREE_LESSON = { courseId: 'javascript-in-depth', lessonId: 'js-01' };
 
-const STORY_CODE = `async function showUser(id) {
-  const res = await fetch(\`/api/users/\${id}\`);
-  const user = await res.json();
-  title.textContent = user.name;
-}`;
-const STORY_LINES = [0, 1, 2, 3];
+const PROMISES = [
+  { icon: Sprout, title: 'We start at zero.', text: 'No assumed knowledge. Every new word is explained the first time it shows up — nothing is “obvious”.' },
+  { icon: Download, title: 'Set up, step by step.', text: 'Need tools on your PC? We tell you exactly what to download, in what order, and how to check it works — so your code runs perfectly on your own machine.' },
+  { icon: MessageCircleQuestion, title: 'Every line explained.', text: 'Hover any line and the Tutor tells you what it does in plain English. If it doesn’t know, it says so.' },
+  { icon: Hammer, title: 'You build real things.', text: 'Not just quizzes. The core courses end with projects you build yourself and can show anyone.' },
+  { icon: InfinityIcon, title: 'Your pace, forever.', text: 'Pay once and keep the course for life. No deadlines, no subscription, and your progress is always saved.' },
+  { icon: ShieldCheck, title: 'Try first, risk-free.', text: 'The first lesson of every course is free. If a course isn’t for you, get a refund within 30 days.' }
+];
 
 const TECH = ['HTML', 'CSS', 'JavaScript', 'React', 'Node.js', 'Express', 'SQL', 'PostgreSQL', 'Java', 'Spring Boot', 'Git', 'Linux', 'Docker', 'GitHub Actions', 'Cloud'];
 
 const WORKSPACE = [
-  { id: 'video', n: '01', title: 'Video lesson', text: 'Short, focused lessons with chapters you can rewatch at your own speed. Your position is remembered.' },
-  { id: 'editor', n: '02', title: 'Live workspace', text: 'Write HTML, CSS and JavaScript beside the video and run it instantly in a sandboxed preview with a console.' },
-  { id: 'explain', n: '03', title: 'Behind the scenes', text: 'Put your cursor on any line. The Tutor explains what the browser, engine or server actually does with it.' },
-  { id: 'notes', n: '04', title: 'Notes and progress', text: 'Notes saved per lesson, progress per course, and a profile that shows how far you have come.' }
+  { id: 'video', n: '01', title: 'Watch', text: 'Short video lessons. Pause, rewind, and pick up exactly where you stopped.' },
+  { id: 'editor', n: '02', title: 'Try it yourself', text: 'Type the code right under the video and see the result straight away. Nothing to install.' },
+  { id: 'explain', n: '03', title: 'Understand', text: 'Stuck on a line? Hover it. The Tutor tells you what it does in plain English.' },
+  { id: 'notes', n: '04', title: 'Keep going', text: 'Your notes and progress are saved to your account, so you always know what comes next.' }
+];
+
+// "We walk with you": the learner's path, from first install to finished project
+const JOURNEY = [
+  { when: 'Before you start', title: 'We get your computer ready — together.', text: 'A clear checklist of what to download and install, in order, with a quick way to check each one worked. No guessing, no “it works on my machine”.' },
+  { when: 'Your first lesson', title: 'Small steps, never a wall of code.', text: 'A short video, then you type the code yourself right underneath it. You see it work before we add the next piece.' },
+  { when: 'When you get stuck', title: 'Help right where you’re stuck.', text: 'Hover the line that confuses you and the Tutor explains it in plain English. Still unsure? Ask the assistant about your own code, inside the lesson.' },
+  { when: 'Every day after', title: 'You always know what’s next.', text: 'Your code, notes and progress are saved. Come back tomorrow or next month and pick up exactly where you left off.' },
+  { when: 'The finish line', title: 'A project that’s truly yours.', text: 'The core courses end with real projects you build yourself — something you can open, run and proudly show anyone.' }
 ];
 
 /* ── Hero ─────────────────────────────────────────────────── */
 const Hero = ({ onBrowse, onTry }) => {
   const reduced = usePrefersReducedMotion();
-  const wide = useMediaQuery('(min-width: 901px)');
-  const scene = wide && !reduced;
+  // narrow screens stack the symbol under the copy instead of beside it
+  const stacked = useMediaQuery('(max-width: 900px)');
+  const scene = !reduced;
   const visualRef = useRef(null);
   return (
     <section className={`hero ${scene ? 'is-scene' : ''}`} aria-labelledby="hero-title">
       <div className="hero-sticky">
         <div className="container hero-grid">
           <div className="hero-copy">
-            <p className="eyebrow is-accent hero-in" style={{ '--i': 0 }}>Monklogy · Software development courses</p>
+            <p className="eyebrow is-accent hero-in" style={{ '--i': 0 }}>Monklogy · Coding courses, starting from zero</p>
             <h1 id="hero-title" className="hero-title">
-              <span className="hero-in" style={{ '--i': 1 }}>Learn what your code</span>{' '}
-              <em className="display-em hero-in" style={{ '--i': 2 }}>actually does.</em>
+              <span className="hero-in" style={{ '--i': 1 }}>Learn to code by</span>{' '}
+              <em className="display-em hero-in" style={{ '--i': 2 }}>understanding it.</em>
             </h1>
             <p className="hero-lede hero-in" style={{ '--i': 3 }}>
-              Full-stack, frontend, Java and DevOps — taught through focused video lessons, a live code workspace, and a
-              tutor that explains what happens behind every line you write.
+              Most people quit coding because tutorials show them what to type, but never why it works. Here you watch a
+              short lesson, write the code yourself, and get every line explained in plain English.
             </p>
             <div className="hero-actions hero-in" style={{ '--i': 4 }}>
-              <button className="btn btn-primary btn-lg" onClick={onBrowse}>
-                Explore courses <ArrowRight size={16} />
+              <button className="btn btn-primary btn-lg" onClick={onTry}>
+                Try a free lesson <ArrowRight size={16} />
               </button>
-              <button className="btn btn-secondary btn-lg" onClick={onTry}>
-                Try a free lesson
+              <button className="btn btn-secondary btn-lg" onClick={onBrowse}>
+                See all courses
               </button>
             </div>
             <ul className="hero-facts hero-in" style={{ '--i': 5 }}>
-              <li>{courses.length} courses</li>
-              <li>One-time purchase</li>
+              <li>First lesson free · no card</li>
+              <li>Pay once, keep it forever</li>
               <li>30-day refund</li>
             </ul>
           </div>
@@ -72,7 +82,7 @@ const Hero = ({ onBrowse, onTry }) => {
           )}
         </div>
         {scene && (
-          <div ref={visualRef} className="hero-scene-visual">
+          <div ref={visualRef} className="hero-scene-visual" data-stacked={stacked ? 'true' : undefined}>
             <TechMorph scene sceneRef={visualRef} />
             <p className="hero-visual-hint mono" aria-hidden="true">move through it · click to morph · scroll to scatter</p>
           </div>
@@ -82,91 +92,48 @@ const Hero = ({ onBrowse, onTry }) => {
   );
 };
 
-/* ── Scroll story: one async function, four lines ─────────── */
-const Story = () => {
-  const reduced = usePrefersReducedMotion();
-  const narrow = useMediaQuery('(max-width: 900px)');
-  const staticMode = reduced || narrow;
-  const { ref, step } = useScrollProgress({ mode: 'through', steps: STORY_LINES.length, disabled: staticMode });
-  const lines = STORY_CODE.split('\n');
-  const explanations = useMemo(
-    () => STORY_LINES.map((i) => explainLine({ code: STORY_CODE, lineIndex: i, language: 'javascript' })),
-    []
-  );
+/* ── Promises to beginners + where to start ──────────────── */
+const Promises = ({ navigateTo }) => {
+  const starters = courses.filter((c) => c.level.startsWith('Beginner'));
+  return (
+    <section className="promises" aria-labelledby="promises-title">
+      <div className="container">
+        <Reveal className="section-head">
+          <p className="eyebrow is-accent">Our promise to beginners</p>
+          <h2 id="promises-title">If you’ve never written code, you’re exactly who this is for.</h2>
+          <p>Six things we promise every beginner — in writing, before you spend a rupee.</p>
+        </Reveal>
 
-  const codeCard = (active) => (
-    <div className="story-code" aria-label="Example code">
-      <div className="story-code-bar">
-        <span className="mono">profile.js</span>
-        <span className="story-code-step mono">
-          {active >= 0 ? `line ${STORY_LINES[active] + 1}` : `${lines.length} lines`}
-        </span>
-      </div>
-      <pre>
-        {lines.map((l, i) => (
-          <div key={i} className={`story-line ${STORY_LINES[active] === i ? 'is-active' : ''}`}>
-            <span className="story-ln" aria-hidden="true">{i + 1}</span>
-            <code>{l || ' '}</code>
+        <ol className="promise-grid">
+          {PROMISES.map((p, i) => (
+            <Reveal as="li" key={p.title} className="promise" delay={(i % 3) * 70}>
+              <span className="promise-icon" aria-hidden="true"><p.icon size={18} /></span>
+              <h3>{p.title}</h3>
+              <p>{p.text}</p>
+            </Reveal>
+          ))}
+        </ol>
+
+        <Reveal className="starters" delay={80}>
+          <div className="starters-head">
+            <h3>Courses that start at zero</h3>
+            <p>No experience needed. Pick one and try the first lesson free.</p>
           </div>
-        ))}
-      </pre>
-    </div>
-  );
-
-  const header = (
-    <div className="story-head">
-      <p className="eyebrow is-accent">The Tutor</p>
-      <h2>Every line, explained by what really happens.</h2>
-      <p>
-        This is the actual output of Monklogy’s line explainer. In a lesson, you get it for every line you write — just by
-        moving your cursor.
-      </p>
-    </div>
-  );
-
-  if (staticMode) {
-    return (
-      <section className="story is-static" aria-labelledby="story-title">
-        <div className="container">
-          <div id="story-title">{header}</div>
-          {codeCard(-1)}
-          <ol className="story-static-steps">
-            {explanations.map((e) => (
-              <li key={e.lineNumber}>
-                <code className="mono">{e.code.trim()}</code>
-                <h3>{e.title}</h3>
-                <p>{e.runtime}</p>
+          <ul className="starter-list">
+            {starters.map((c) => (
+              <li key={c.id}>
+                <button className="starter" onClick={() => navigateTo('course-details', { courseId: c.id })}>
+                  <CourseMark course={c} size={34} />
+                  <span className="starter-body">
+                    <span className="starter-name">{c.title}</span>
+                    <span className="starter-meta mono">{c.level} · {getLessonCount(c.id)} lessons</span>
+                  </span>
+                  <ArrowUpRight size={16} className="starter-arrow" aria-hidden="true" />
+                </button>
               </li>
             ))}
-          </ol>
-        </div>
-      </section>
-    );
-  }
-
-  const e = explanations[step];
-  return (
-    <section ref={ref} className="story" style={{ '--steps': STORY_LINES.length }} aria-labelledby="story-title">
-      <div className="story-sticky">
-        <div className="container story-grid">
-          <div id="story-title">
-            {header}
-            {codeCard(step)}
-          </div>
-          <div className="story-explain" aria-live="polite">
-            <div className="story-progress" aria-hidden="true">
-              {STORY_LINES.map((_, i) => (
-                <span key={i} className={i <= step ? 'is-on' : ''} />
-              ))}
-            </div>
-            <div className="story-explain-body" key={step}>
-              <p className="story-kicker mono">Line {e.lineNumber} · what the runtime does</p>
-              <h3>{e.title}</h3>
-              <p className="story-runtime">{e.runtime}</p>
-              <p className="story-next"><span className="mono">next →</span> {e.next}</p>
-            </div>
-          </div>
-        </div>
+          </ul>
+        </Reveal>
       </div>
     </section>
   );
@@ -186,46 +153,67 @@ const TechBand = () => {
   );
 };
 
-/* ── Curriculum index ─────────────────────────────────────── */
-const Curriculum = ({ navigateTo, isOwned }) => (
-  <section className="container section" aria-labelledby="curriculum-title">
-    <Reveal className="section-head split">
-      <div>
-        <p className="eyebrow">Curriculum</p>
-        <h2 id="curriculum-title">Ten courses. One way of teaching.</h2>
-      </div>
-      <p>Four core tracks take you from first line to production. Focused courses go deep on the tools inside them.</p>
-    </Reveal>
+/* ── We walk with you: the guided path ─────────────────────── */
+const WalkWithYou = () => {
+  const pathRef = useRef(null);
 
-    <ol className="index-list">
-      {courses.map((c, i) => (
-        <Reveal as="li" key={c.id} delay={Math.min(i, 6) * 50}>
-          <button className="index-row" onClick={() => navigateTo('course-details', { courseId: c.id })}>
-            <span className="index-num mono">{String(i + 1).padStart(2, '0')}</span>
-            <span className="index-mark"><CourseMark course={c} size={40} /></span>
-            <span className="index-title">
-              <span className="index-name">{c.title}</span>
-              <span className="index-sub">{c.subtitle}</span>
-            </span>
-            <span className="index-meta mono">
-              <span>{c.category}</span>
-              <span>{getLessonCount(c.id)} lessons</span>
-              <span>{c.hours} h</span>
-            </span>
-            <span className="index-end">
-              {isOwned(c.id) ? (
-                <span className="tag is-success"><Check size={12} /> Enrolled</span>
-              ) : (
-                <span className="index-price mono">{formatPrice(c.price)}</span>
-              )}
-              <ArrowUpRight size={18} className="index-arrow" aria-hidden="true" />
-            </span>
-          </button>
-        </Reveal>
-      ))}
-    </ol>
+  // Scroll-linked trail: the orange line grows down to a "reading line" in the
+  // viewport, and each step lights up once the line reaches its dot.
+  useEffect(() => {
+    const path = pathRef.current;
+    if (!path) return undefined;
+    const steps = [...path.querySelectorAll('.walk-step')];
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const mark = window.innerHeight * 0.62;
+      const rect = path.getBoundingClientRect();
+      const fill = Math.min(rect.height, Math.max(0, mark - rect.top));
+      path.style.setProperty('--fill', `${fill.toFixed(1)}px`);
+      steps.forEach((step) => {
+        const dot = step.querySelector('.walk-dot').getBoundingClientRect();
+        step.classList.toggle('is-lit', dot.top + dot.height / 2 <= mark);
+      });
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  return (
+  <section className="container section walk" aria-labelledby="walk-title">
+    <div className="walk-grid">
+      <Reveal className="walk-intro">
+        <p className="eyebrow is-accent">More than a tutor</p>
+        <h2 id="walk-title">
+          We don’t just teach you. <em className="display-em">We walk the whole way with you.</em>
+        </h2>
+        <p>
+          Most people who quit coding don’t quit because it’s hard — they quit because they’re left alone with it.
+          So from your very first install to your first finished project, we hold your hand at every step.
+        </p>
+      </Reveal>
+
+      <ol ref={pathRef} className="walk-path">
+        {JOURNEY.map((j, i) => (
+          <Reveal as="li" key={j.when} className="walk-step" delay={i * 80}>
+            <span className="walk-dot mono" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+            <p className="walk-when mono">{j.when}</p>
+            <h3>{j.title}</h3>
+            <p>{j.text}</p>
+          </Reveal>
+        ))}
+      </ol>
+    </div>
   </section>
-);
+  );
+};
 
 /* ── The learning environment: a live, inspectable workspace ─ */
 const Workspace = () => (
@@ -233,12 +221,12 @@ const Workspace = () => (
     <div className="container">
       <Reveal className="section-head split">
         <div>
-          <p className="eyebrow">The learning environment</p>
-          <h2 id="workspace-title">Write it. Run it. Watch what really happens.</h2>
+          <p className="eyebrow">Try it now — no sign-up</p>
+          <h2 id="workspace-title">Write it. See it. Understand it.</h2>
         </div>
         <p>
-          This is the real workspace from every lesson. Hover a line to see the runtime at work — the call stack,
-          the browser, the queues — then run it and compare the terminal’s output order.
+          Every web page is made of three files: HTML for structure, CSS for style and JavaScript for behaviour.
+          Hover any line to see what it does on the page, or hover the page to find the code behind it.
         </p>
       </Reveal>
       <Reveal delay={80}>
@@ -261,15 +249,15 @@ const Workspace = () => (
 const Principles = () => (
   <section className="container section" aria-labelledby="principles-title">
     <Reveal className="section-head">
-      <p className="eyebrow">How we teach</p>
-      <h2 id="principles-title">Built by people who care how you learn.</h2>
+      <p className="eyebrow">The honest part</p>
+      <h2 id="principles-title">Learning to code is hard. We won’t pretend it isn’t.</h2>
     </Reveal>
     <div className="principles">
       {principles.map((p, i) => (
         <Reveal key={p.title} className="principle" delay={i * 60}>
           <span className="principle-n mono">{String(i + 1).padStart(2, '0')}</span>
           <h3>{p.title}</h3>
-          <p>{p.description}</p>
+          <p><strong>What we do about it: </strong>{p.description}</p>
         </Reveal>
       ))}
     </div>
@@ -299,7 +287,7 @@ const FinalCta = ({ onBrowse, onTry }) => (
       <h2 id="cta-title">
         Start with one lesson. <em className="display-em">See the difference.</em>
       </h2>
-      <p>The first lesson of every course is free. Create an account, no card needed.</p>
+      <p>The first lesson of every course is free. No card, and no trial that quietly turns into a bill.</p>
       <div className="hero-actions">
         <button className="btn btn-accent btn-lg" onClick={onTry}>Try a free lesson <ArrowRight size={16} /></button>
         <button className="btn btn-ghost btn-lg" onClick={onBrowse}>Browse all courses</button>
@@ -309,16 +297,16 @@ const FinalCta = ({ onBrowse, onTry }) => (
 );
 
 export const Lobby = () => {
-  const { navigateTo, isOwned } = useApp();
+  const { navigateTo } = useApp();
   const onBrowse = () => navigateTo('courses');
   const onTry = () => navigateTo('tutor', FREE_LESSON);
 
   return (
     <div className="lobby">
       <Hero onBrowse={onBrowse} onTry={onTry} />
-      <Story />
+      <Promises navigateTo={navigateTo} />
       <TechBand />
-      <Curriculum navigateTo={navigateTo} isOwned={isOwned} />
+      <WalkWithYou />
       <Workspace />
       <Principles />
       <Faq />

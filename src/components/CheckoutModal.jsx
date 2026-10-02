@@ -1,15 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatPrice, formatPriceExact } from '../lib/money';
-import { X, Lock, ShieldCheck, AlertCircle, CreditCard, Smartphone, Landmark, Wallet } from 'lucide-react';
+import { X, ShieldCheck, AlertCircle, CreditCard, Smartphone, Landmark, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal } from './Modal';
 import { CourseMark } from './CourseMark';
+import SlideCommit from './reactbits/SlideCommit';
 
 const CHECK = {
   question: 'Quick check: which element marks a group of navigation links?',
   answer: '<nav>',
   options: ['<menu-links>', '<nav>', '<div class="nav">', '<header-nav>']
 };
+
+// SlideCommit picks its text colours from hex values, so it gets literal theme colours, not CSS vars.
+const SLIDER_COLORS = {
+  light: { track: '#edeae3', handle: '#c65a12', success: '#2f7a4b', danger: '#b4232f' },
+  dark: { track: '#1b1b18', handle: '#f08a3c', success: '#5bbe7f', danger: '#f2727c' }
+};
+
+const PAY_LOADING_MS = 1500;
 
 export const PAYMENT_METHODS = [
   { id: 'card', label: 'Credit / debit card', icon: CreditCard },
@@ -19,10 +28,12 @@ export const PAYMENT_METHODS = [
 ];
 
 export const CheckoutModal = () => {
-  const { checkoutModal, setCheckoutModal, completePurchase, closeCheckoutModal, profile } = useApp();
+  const { checkoutModal, setCheckoutModal, completePurchase, closeCheckoutModal, profile, theme } = useApp();
   const [picked, setPicked] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [method, setMethod] = useState('card');
+  const sliderBox = useRef(null);
+  const [sliderWidth, setSliderWidth] = useState(0);
 
   useEffect(() => {
     if (checkoutModal.isOpen) {
@@ -33,6 +44,17 @@ export const CheckoutModal = () => {
   }, [checkoutModal.isOpen]);
 
   const { step, items, totalPrice } = checkoutModal;
+
+  // The slider takes a pixel width, so track the width of the column it sits in.
+  useLayoutEffect(() => {
+    const el = sliderBox.current;
+    if (!el) return;
+    const measure = () => setSliderWidth(Math.floor(el.clientWidth));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [checkoutModal.isOpen, step]);
   const wrong = picked && picked !== CHECK.answer;
 
   const choose = (opt) => {
@@ -40,15 +62,19 @@ export const CheckoutModal = () => {
     if (opt === CHECK.answer) setTimeout(() => setCheckoutModal((m) => ({ ...m, step: 'payment' })), 350);
   };
 
-  const pay = async (e) => {
-    e.preventDefault();
-    if (processing) return;
+  // Resolves on success (the dialog then closes); rejects so the slider shakes and springs home.
+  const pay = async () => {
     setProcessing(true);
     const m = PAYMENT_METHODS.find((x) => x.id === method) || PAYMENT_METHODS[0];
+    // Hold the slider's spinner for a beat before the purchase closes the dialog.
+    await new Promise((r) => setTimeout(r, PAY_LOADING_MS));
     const ok = await completePurchase({ method: m.id });
-    // On success the dialog closes; on failure let the learner try again.
-    if (!ok) setProcessing(false);
+    if (!ok) {
+      setProcessing(false);
+      throw new Error('Payment not completed');
+    }
   };
+  const colors = SLIDER_COLORS[theme] || SLIDER_COLORS.light;
 
   return (
     <Modal open={checkoutModal.isOpen} onClose={processing ? undefined : closeCheckoutModal} labelledBy="checkout-title" className="checkout">
@@ -98,7 +124,7 @@ export const CheckoutModal = () => {
         )}
 
         {step === 'payment' && (
-          <form onSubmit={pay} className="pay">
+          <div className="pay">
             <p className="notice">
               <ShieldCheck size={16} aria-hidden="true" />
               <span>This is a prototype checkout. No payment is taken and no card details are collected.</span>
@@ -120,10 +146,25 @@ export const CheckoutModal = () => {
               <div><dt>Access</dt><dd>Lifetime</dd></div>
               <div className="pay-total"><dt>Total</dt><dd>{formatPriceExact(totalPrice)}</dd></div>
             </dl>
-            <button type="submit" className="btn btn-accent btn-block btn-lg" disabled={processing} data-autofocus>
-              {processing ? 'Confirming…' : (<><Lock size={15} /> Pay {formatPrice(totalPrice)}</>)}
-            </button>
-          </form>
+            <div ref={sliderBox} className="pay-slide">
+              {sliderWidth > 0 && (
+                <SlideCommit
+                  label={`Slide to pay ${formatPrice(totalPrice)}`}
+                  doneLabel="Paid"
+                  errorLabel="Payment failed"
+                  onConfirm={pay}
+                  trackColor={colors.track}
+                  handleColor={colors.handle}
+                  successColor={colors.success}
+                  dangerColor={colors.danger}
+                  width={sliderWidth}
+                  height={52}
+                  radius={26}
+                  holdMs={0}
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
     </Modal>

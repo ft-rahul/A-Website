@@ -81,31 +81,36 @@ export const Navbar = () => {
 
         <div className="nav-actions">
           <button
-            className="icon-btn"
+            className="icon-btn nav-pill is-theme"
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
           >
-            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            <span className={`nav-pill-icon theme-icon is-${theme}`} aria-hidden="true">
+              <Sun size={16} className="theme-icon-sun" />
+              <Moon size={16} className="theme-icon-moon" />
+            </span>
+            <span className="nav-pill-label" aria-hidden="true">
+              <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+            </span>
           </button>
           {user ? (
           <>
           <button
-            className="icon-btn"
+            className={`icon-btn nav-pill is-cart ${currentRoute === 'cart' ? 'is-active' : ''}`}
             onClick={() => go('cart')}
             aria-label={`Cart${cart.length ? `, ${cart.length} item${cart.length > 1 ? 's' : ''}` : ''}`}
-            title="Cart"
           >
-            <ShoppingBag size={16} />
+            <span className="nav-pill-icon"><ShoppingBag size={16} /></span>
+            <span className="nav-pill-label" aria-hidden="true"><span>My cart</span></span>
             {cart.length > 0 && <span className="count-badge">{cart.length}</span>}
           </button>
           <button
-            className={`avatar-btn ${currentRoute === 'profile' ? 'is-active' : ''}`}
+            className={`nav-pill is-profile ${currentRoute === 'profile' ? 'is-active' : ''}`}
             onClick={() => go('profile')}
             aria-label="Your profile"
-            title="Profile"
           >
-            {initials}
+            <span className="avatar-btn" aria-hidden="true">{initials}</span>
+            <span className="nav-pill-label" aria-hidden="true"><span>Profile</span></span>
           </button>
           </>
           ) : (

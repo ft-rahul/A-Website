@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { getCourse, courses } from '../data/catalog';
 import { storage, removeLegacyKeys, todayKey, setStorageUser } from '../lib/storage';
 import { del, post, put } from '../lib/api';
@@ -46,7 +47,42 @@ export const AppProvider = ({ children }) => {
     document.documentElement.setAttribute('data-theme', theme);
     storage.setRaw('theme', theme);
   }, [theme]);
-  const toggleTheme = useCallback(() => setTheme((t) => (t === 'light' ? 'dark' : 'light')), []);
+  // Switching theme: a circle of the new theme grows out from the button that was
+  // clicked and covers the page. Browsers without View Transitions get a cross-fade.
+  const toggleTheme = useCallback((e) => {
+    const root = document.documentElement;
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    const apply = () => {
+      root.setAttribute('data-theme', next);
+      flushSync(() => setTheme(next));
+    };
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return apply();
+
+    if (!document.startViewTransition) {
+      root.classList.add('theme-fading');
+      apply();
+      window.setTimeout(() => root.classList.remove('theme-fading'), 500);
+      return undefined;
+    }
+
+    const btn = e?.currentTarget?.getBoundingClientRect?.();
+    const x = btn ? btn.left + btn.width / 2 : window.innerWidth - 40;
+    const y = btn ? btn.top + btn.height / 2 : 30;
+    const r = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+    root.classList.add('theme-switching');
+    const vt = document.startViewTransition(apply);
+    vt.ready
+      .then(() => {
+        root.animate(
+          { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+          { duration: 650, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', pseudoElement: '::view-transition-new(root)' }
+        );
+      })
+      .catch(() => {});
+    vt.finished.finally(() => root.classList.remove('theme-switching'));
+    return undefined;
+  }, []);
 
   // Theme customization (palettes / fonts) was removed: clear anything an
   // earlier version saved so every learner gets the Monklogy look.

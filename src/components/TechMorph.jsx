@@ -6,7 +6,7 @@ import { usePrefersReducedMotion } from '../hooks/useMediaQuery';
  * The Lobby's interactive centrepiece: a field of particles that assembles
  * into technical symbols and morphs between them —
  *   </>  markup · { }  logic · chip  hardware · >_  terminal · branch  version control
- * The pointer gently pushes nearby dots aside (no connecting lines). After 2 s
+ * The pointer gently pushes nearby dots aside (no connecting lines). After 1 s
  * without cursor movement the push switches off and the dots settle back into
  * the pose; moving again re-enables it. The symbols keep morphing on their own,
  * and a click jumps to the next one.
@@ -16,6 +16,19 @@ import { usePrefersReducedMotion } from '../hooks/useMediaQuery';
  */
 
 const HOLD_MS = 3800;
+
+// Low-discrepancy sequence: points that cover an area evenly with no clumps or
+// gaps, and any prefix of the sequence is itself evenly spread.
+const halton = (i, base) => {
+  let f = 1;
+  let r = 0;
+  while (i > 0) {
+    f /= base;
+    r += f * (i % base);
+    i = Math.floor(i / base);
+  }
+  return r;
+};
 const GLYPHS = ['{', '}', '<', '/>', '=>', ';', '()', '01', '&&', '#'];
 const SAMPLE = 320;
 
@@ -115,7 +128,7 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
     let time = 0;
     let disposed = false;
     const pointer = { x: 0, y: 0, active: false, lastMove: 0 };
-    const IDLE_MS = 2000;
+    const IDLE_MS = 1000;
     const ripples = [];
     const COUNT = () => Math.round(Math.min(1500, Math.max(600, (width * height) / 230)));
 
@@ -137,21 +150,26 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const n = COUNT();
-      if (particles.length !== n) {
+      if (!particles.length || Math.abs(particles.length - n) / particles.length > 0.15) {
         particles = Array.from({ length: n }, (_, i) => ({
           x: width / 2 + (Math.random() - 0.5) * width,
           y: height / 2 + (Math.random() - 0.5) * height,
           vx: 0,
           vy: 0,
+          ox: 0, // cursor nudge while spread in the background
+          oy: 0,
+          ovx: 0,
+          ovy: 0,
           size: Math.random() < 0.88 ? 1.3 + Math.random() * 1.2 : 2.6,
           accent: Math.random() < 0.09,
           glyph: i % 41 === 0 ? GLYPHS[i % GLYPHS.length] : null,
           alpha: 0.45 + Math.random() * 0.55,
           phase: Math.random() * Math.PI * 2,
           delay: Math.random(), // when this particle leaves the symbol
-          keep: Math.random(), // decides which dots stay visible once spread out
-          bgX: Math.random(), // resting place when spread across the background
-          bgY: Math.random()
+          keep: i / n, // which dots stay visible once spread out: an even prefix of the sequence
+          // resting place in the background: evenly spread over the whole screen
+          bgX: Math.min(1, Math.max(0, halton(i + 1, 2) + (Math.random() - 0.5) * 0.012)),
+          bgY: Math.min(1, Math.max(0, halton(i + 1, 3) + (Math.random() - 0.5) * 0.012))
         }));
         buildTargets();
       }
@@ -164,27 +182,33 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
     };
 
     // Scene mode (desktop Lobby), scroll-driven background — follows the scroll both ways:
-    //  • from the very first scroll step down, dots start leaving the symbol
-    //  • every further step releases more — no pauses, no sudden jumps; at the bottom
-    //    of the page they are spread everywhere
-    //  • every step back up gathers some home again; at the top the symbol is whole
-    //    and morphing again
-    //  • spread dots are thinned out and faint so they never compete with the content
+    //  • at the top the symbol is whole and morphing
+    //  • scrolling down moves the dots out of the symbol and spreads them evenly over
+    //    the whole screen; their position follows the scroll exactly (scroll a little,
+    //    they move a little). The spread lasts the whole page: the last dots arrive
+    //    when you reach the bottom
+    //  • scrolling back up brings them home the same way
+    //  • freed dots stay visible but soft, and stay spread down to the end of the page
     const START_AT = 8; // ignore sub-pixel / rubber-band scroll at the top
-    const CURVE = 0.55; // < 1: early steps move visibly, later steps keep adding
+    const BURST_PX = 260; // the first two scroll steps release most of the dots at once
+    const BURST_SHARE = 0.62; // how much of the spread happens in that burst
     const navH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-height')) || 60;
     const scrollLevel = () => {
       const y = window.scrollY - START_AT;
       if (y <= 0) return 0;
       const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight - START_AT);
-      return Math.pow(Math.min(1, y / max), CURVE);
+      // a big burst in the first scrolls, then the rest arrives slowly until the very bottom
+      const b = Math.min(1, y / BURST_PX);
+      const burst = 1 - (1 - b) * (1 - b);
+      return Math.min(1, BURST_SHARE * burst + (1 - BURST_SHARE) * Math.min(1, y / max));
     };
     let spreadSmooth = scene ? scrollLevel() : 0;
+    let lastAnchor = null;
     const sceneSpread = () => {
       if (!scene) return 0;
       const level = scrollLevel();
-      // ease toward the scroll position so each step glides rather than snaps
-      spreadSmooth += (level - spreadSmooth) * 0.07;
+      // follow the scroll closely, but turn each scroll-wheel jump into a quick, smooth burst
+      spreadSmooth += (level - spreadSmooth) * 0.14;
       if (Math.abs(level - spreadSmooth) < 0.0005) spreadSmooth = level;
       return spreadSmooth;
     };
@@ -193,6 +217,8 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
       if (scene && sceneRef?.current) {
         // the canvas is fixed to the viewport; the symbol follows the hero's visual area
         const r = sceneRef.current.getBoundingClientRect();
+        // phones/tablets: the visual area sits under the copy, so centre the symbol in it
+        if (sceneRef.current.dataset.stacked) return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, s: Math.min(r.width, r.height) * 0.9 };
         return { cx: r.left + r.width * 0.74, cy: r.top + r.height * 0.5, s: Math.min(r.width * 0.4, r.height * 0.82) };
       }
       return { cx: width / 2, cy: height / 2, s: Math.min(width, height) * 0.95 };
@@ -206,37 +232,34 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
       const s = a.s * (1 + scatter * 0.8);
       const breathe = Math.sin(time * 0.0012 + p.phase) * 1.2;
       const home = { x: a.cx + t[0] * s + breathe, y: a.cy + t[1] * s + breathe * 0.6 };
-      if (spread <= 0.001) return home;
-      const smooth = (k) => k * k * (3 - 2 * k);
-      const drift = Math.sin(time * 0.0005 + p.phase) * 8;
-      // staggered: each dot leaves at its own moment, straight into the background
-      const k = smooth(Math.min(1, Math.max(0, spread * 1.45 - p.delay * 0.45)));
-      const bg = { x: p.bgX * width + drift * 0.6, y: navH + p.bgY * (height - navH) + drift };
-      return { x: home.x + (bg.x - home.x) * k, y: home.y + (bg.y - home.y) * k };
+      // How far this dot is on its way to the background. Each dot starts at its own
+      // moment (p.delay), and its position follows the scroll exactly — no lag.
+      const k = Math.min(1, Math.max(0, spread * 1.6 - p.delay * 0.6));
+      p.k = spread > 0.001 ? k * k * (3 - 2 * k) : 0;
+      return home;
     };
 
     const draw = (scatter, spread = 0) => {
-      // Spread across the page, only a share of the dots stays visible, small and faint,
-      // so headings and text above them stay calm and readable.
-      const bgShare = scene ? Math.min(1, spread) : 0;
-      const keepFrac = 1 - bgShare * 0.62;
-      const dim = 1 - bgShare * 0.6;
       ctx.clearRect(0, 0, width, height);
       const fade = 1 - scatter;
       if (fade <= 0.01) return;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `11px ${colors.mono}`;
+      const bgFrac = Math.min(1, Math.min(900, (width * height) / 1400) / Math.max(1, particles.length));
       for (const p of particles) {
-        const thin = Math.min(1, Math.max(0, (keepFrac - p.keep) * 12));
+        // Spread: each dot slides from the symbol to its own evenly spaced spot on the
+        // screen and settles at a soft, steady strength. Extra dots beyond the
+        // background's density fade out on the way, so it never gets crowded.
+        const k = p.k || 0;
+        const thin = p.keep < bgFrac ? 1 : 1 - k;
         if (thin <= 0.01) continue;
-        ctx.globalAlpha = p.alpha * fade * thin * dim;
+        const x = p.sx ?? p.x;
+        const y = p.sy ?? p.y;
+        ctx.globalAlpha = (p.alpha + (0.35 - p.alpha) * k) * fade * thin;
         ctx.fillStyle = p.accent ? colors.accent : colors.ink;
-        if (p.glyph && bgShare < 0.2) ctx.fillText(p.glyph, p.x, p.y);
-        else {
-          const sz = p.size * (1 - bgShare * 0.3);
-          ctx.fillRect(p.x, p.y, sz, sz);
-        }
+        if (p.glyph && k < 0.2) ctx.fillText(p.glyph, x, y);
+        else ctx.fillRect(x, y, p.size, p.size);
       }
       ctx.globalAlpha = 1;
     };
@@ -265,25 +288,52 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
       else if (now - lastSwitch > HOLD_MS) nextShape();
       if (labelRef.current) labelRef.current.style.opacity = String(1 - Math.min(1, spread * 2));
       const scatter = scrollScatter();
-      // minimal, local push; even softer once the dots sit behind the page content
-      const push = Math.max(60, Math.min(width, height) * 0.08) * (spread > 0.05 ? 0.7 : 1);
-      const pushForce = spread > 0.05 ? 0.7 : 1.3;
+      // The symbol rides with the hero as the page scrolls: move every dot by the same
+      // amount the hero moved, so they travel together instead of trailing in a wave.
+      if (scene) {
+        const a = anchor();
+        if (lastAnchor) {
+          const mx = a.cx - lastAnchor.cx;
+          const my = a.cy - lastAnchor.cy;
+          if (mx || my) particles.forEach((p) => { p.x += mx; p.y += my; });
+        }
+        lastAnchor = a;
+      }
+      // push around the cursor: local in the symbol, wider and stronger for the
+      // small, faint dots in the background so the movement is easy to see
+      const push = spread > 0.05 ? Math.min(50, Math.max(40, Math.min(width, height) * 0.05)) : 30;
+      const pushForce = spread > 0.05 ? 2.4 : 1.3;
 
       particles.forEach((p, i) => {
         const h = targetFor(i, scatter, spread);
-        p.vx += (h.x - p.x) * 0.018;
-        p.vy += (h.y - p.y) * 0.018;
+        const pull = 0.018;
+        p.vx += (h.x - p.x) * pull;
+        p.vy += (h.y - p.y) * pull;
+        // where the dot is on screen: between its place in the symbol and its place in
+        // the background, plus how far the cursor has nudged it there
+        const k = p.k || 0;
+        const sx = p.x + (p.bgX * width - p.x) * k + p.ox * k;
+        const sy = p.y + (navH + p.bgY * (height - navH) - p.y) * k + p.oy * k;
         if (repelOn) {
-          const dx = p.x - pointer.x;
-          const dy = p.y - pointer.y;
+          const dx = sx - pointer.x;
+          const dy = sy - pointer.y;
           const d2 = dx * dx + dy * dy;
           if (d2 < push * push && d2 > 0.01) {
             const d = Math.sqrt(d2);
             const f = (1 - d / push) * pushForce; // gentle, straight-out push
             p.vx += (dx / d) * f;
             p.vy += (dy / d) * f;
+            p.ovx += (dx / d) * f;
+            p.ovy += (dy / d) * f;
           }
         }
+        // a nudged background dot springs back to its own spot
+        p.ovx = (p.ovx - p.ox * 0.02) * 0.86;
+        p.ovy = (p.ovy - p.oy * 0.02) * 0.86;
+        p.ox += p.ovx;
+        p.oy += p.ovy;
+        p.sx = sx;
+        p.sy = sy;
         for (const rp of ripples) {
           const dx = p.x - rp.x;
           const dy = p.y - rp.y;
@@ -326,7 +376,7 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
     };
     const onLeave = () => { pointer.active = false; };
     // While scrolling no pointermove fires, so the stored position is stale: release it.
-    const onScroll = () => { pointer.active = false; };
+    const onScroll = () => { pointer.lastMove = 0; };
     const onDown = (e) => {
       const p = local(e);
       if (!p.inside || e.target.closest?.('a, button, input, textarea, select, label')) return;
@@ -334,7 +384,8 @@ export const TechMorph = ({ className = '', scene = false, sceneRef = null }) =>
         // in the full-page layer, clicks only morph the symbol while it is formed in the hero
         if (spreadSmooth > 0.05 || !sceneRef?.current) return;
         const r = sceneRef.current.getBoundingClientRect();
-        if (e.clientX < r.left + r.width * 0.5 || e.clientY < r.top || e.clientY > r.bottom) return;
+        const minX = sceneRef.current.dataset.stacked ? r.left : r.left + r.width * 0.5;
+        if (e.clientX < minX || e.clientY < r.top || e.clientY > r.bottom) return;
       }
       ripples.push({ x: p.x, y: p.y, radius: 0, strength: 1 });
       nextShape();
