@@ -3,6 +3,7 @@ import { ShoppingBag, Sun, Moon, Menu, X, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from './Logo';
+import { BASE } from '../lib/router';
 
 const NAV = [
   { label: 'Courses', route: 'courses' },
@@ -50,7 +51,7 @@ export const Navbar = () => {
     <header className={`navbar ${scrolled ? 'is-scrolled' : ''}`}>
       <div className="container navbar-inner">
         <a
-          href="/monkology"
+          href={BASE}
           className="nav-brand"
           onClick={(e) => {
             e.preventDefault();

@@ -7,7 +7,9 @@
 //   /monkology/mycourses · /cart · /profile
 import { getCourse } from '../data/catalog';
 
-export const BASE = '/monkology';
+// The site's root (import.meta.env.BASE_URL): '/' locally, '/A-Website/' on GitHub Pages.
+const ROOT = import.meta.env.BASE_URL.replace(/\/+$/, '');
+export const BASE = `${ROOT}/monkology`;
 
 export const routeToPath = (route, p = {}) => {
   switch (route) {
@@ -32,7 +34,7 @@ export const routeToPath = (route, p = {}) => {
 
 export const pathToRoute = (pathname) => {
   const path = decodeURIComponent(pathname).replace(/\/+$/, '') || '/';
-  if (path === '/' || path === '') return { route: 'lobby', params: {}, redirect: BASE };
+  if (path === '/' || path === '' || path === ROOT) return { route: 'lobby', params: {}, redirect: BASE };
   if (path !== BASE && !path.startsWith(`${BASE}/`)) return { route: 'not-found', params: { path } };
   const seg = path.slice(BASE.length).split('/').filter(Boolean);
   if (!seg.length) return { route: 'lobby', params: {} };
