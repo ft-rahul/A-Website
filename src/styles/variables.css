@@ -1,0 +1,142 @@
+/*
+ * Monklogy design tokens.
+ * One accent (saffron), one ink, one paper. Success and danger are the only
+ * other hues, and they are reserved for state.
+ */
+:root {
+  /* Surfaces — light (paper) */
+  --bg-primary: #f5f3ee;
+  --bg-secondary: #fbfaf7;
+  --bg-tertiary: #edeae3;
+  --bg-subtle: #e3dfd6;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fdfcfa;
+
+  /* Ink */
+  --text-primary: #141413;
+  --text-secondary: #46443f;
+  --text-muted: #6f6b63;
+  --text-subtle: #9c978d;
+  --text-inverse: #f5f3ee;
+
+  /* Accent — saffron */
+  --brand-primary: #c65a12;
+  --brand-hover: #a84a0c;
+  --brand-light: rgba(198, 90, 18, 0.09);
+  --brand-text: #a84a0c;
+  --brand-border: rgba(198, 90, 18, 0.32);
+  --brand-contrast: #ffffff;
+
+  /* State */
+  --accent-emerald: #2f7a4b;
+  --accent-emerald-light: rgba(47, 122, 75, 0.1);
+  --accent-rose: #b4232f;
+  --accent-rose-light: rgba(180, 35, 47, 0.08);
+  --accent-amber: #9a6a00;
+  --accent-amber-light: rgba(154, 106, 0, 0.1);
+
+  /* Lines */
+  --border-color: #e2ded5;
+  --border-subtle: #cfc9bd;
+  --border-dark: #141413;
+  --border-focus: #c65a12;
+
+  /* Code surfaces (site-wide, the Tutor overrides these per its own theme) */
+  --code-bg: #141413;
+  --code-header: #1b1b19;
+  --code-fg: #ece8df;
+  --code-muted: #7d786e;
+  --code-gutter: #5a564f;
+  --code-line: rgba(240, 138, 60, 0.09);
+  --code-border: #2a2925;
+
+  /* Depth — quiet */
+  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.05);
+  --shadow-md: 0 1px 2px rgba(20, 20, 19, 0.04), 0 6px 16px -6px rgba(20, 20, 19, 0.1);
+  --shadow-lg: 0 2px 4px rgba(20, 20, 19, 0.04), 0 18px 40px -12px rgba(20, 20, 19, 0.18);
+
+  /* Type */
+  --font-serif: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'Geist', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Type scale */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-md: 1.125rem;
+  --fs-lg: 1.375rem;
+
+  /* Spacing scale (4px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  /* Geometry — squared, not pill-shaped */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.24s var(--ease-out);
+  --transition-slow: 0.5s var(--ease-out);
+
+  --nav-height: 60px;
+  --container-max: 1200px;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0e0e0c;
+  --bg-secondary: #141412;
+  --bg-tertiary: #1b1b18;
+  --bg-subtle: #26251f;
+  --bg-card: #161614;
+  --bg-card-hover: #1c1c19;
+
+  --text-primary: #f2efe8;
+  --text-secondary: #c4c0b6;
+  --text-muted: #949086;
+  --text-subtle: #66625a;
+  --text-inverse: #0e0e0c;
+
+  --brand-primary: #f08a3c;
+  --brand-hover: #f6a262;
+  --brand-light: rgba(240, 138, 60, 0.12);
+  --brand-text: #f6a262;
+  --brand-border: rgba(240, 138, 60, 0.35);
+  --brand-contrast: #1a0e04;
+
+  --accent-emerald: #5bbe7f;
+  --accent-emerald-light: rgba(91, 190, 127, 0.12);
+  --accent-rose: #f2727c;
+  --accent-rose-light: rgba(242, 114, 124, 0.12);
+  --accent-amber: #e2b44a;
+  --accent-amber-light: rgba(226, 180, 74, 0.12);
+
+  --border-color: #262521;
+  --border-subtle: #36352f;
+  --border-dark: #f2efe8;
+  --border-focus: #f08a3c;
+
+  --code-bg: #0a0a09;
+  --code-header: #121210;
+  --code-border: #24231f;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+
+  color-scheme: dark;
+}
