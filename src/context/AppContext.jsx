@@ -2,8 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { flushSync } from 'react-dom';
 import { getCourse, courses } from '../data/catalog';
 import { storage, removeLegacyKeys, todayKey, setStorageUser } from '../lib/storage';
-import { del, post, put } from '../lib/api';
-import { resetUserData } from '../lib/userData';
+import { clearState, EMPTY_STATE, saveState } from '../lib/localDb';
+import { hydrateUserData } from '../lib/userData';
 import { pathToRoute, routeToPath } from '../lib/router';
 import { useAuth, PUBLIC_ROUTES } from './AuthContext';
 import { pickQuote } from '../lib/receipt';
@@ -13,7 +13,6 @@ const AppContext = createContext(null);
 // New accounts start with nothing; they enrol from the catalogue.
 const DEFAULT_OWNED = [];
 const MAX_EVENTS = 120;
-const enc = encodeURIComponent;
 const newKey = () => {
   try {
     return crypto.randomUUID().replace(/-/g, '');
@@ -32,9 +31,13 @@ const systemTheme = () => {
 
 const validIds = (ids) => (Array.isArray(ids) ? ids.filter((id) => getCourse(id)) : []);
 
+const PAYMENT_METHODS = { card: 'Credit / debit card', upi: 'UPI', netbanking: 'Net banking', wallet: 'Wallet' };
+const ALPHABET = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+const randomCode = (n) => Array.from({ length: n }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join('');
+
 export const AppProvider = ({ children }) => {
   const { user, requestLogin, updateName, takeGreeting, takeInitialState } = useAuth();
-  // Server state loaded at sign-in. This provider is re-mounted when the user changes.
+  // Saved state loaded at sign-in. This provider is re-mounted when the user changes.
   const initialData = useMemo(() => (user ? takeInitialState() : null), [user, takeInitialState]);
   setStorageUser(user?.id);
   useEffect(() => {
@@ -168,7 +171,6 @@ export const AppProvider = ({ children }) => {
   );
 
   // ── Activity log (drives streaks, heatmap, journey) ───────
-  // The server records activity; this local copy updates streaks instantly.
   const [activity, setActivity] = useState(() => initialData?.activity || { days: {}, events: [] });
   const logEvent = useCallback((type, data = {}) => {
     const at = new Date().toISOString();
@@ -219,25 +221,13 @@ export const AppProvider = ({ children }) => {
       }
       setCartIds((prev) => [...prev, course.id]);
       showToast('Added to cart', course.title, 'success');
-      post('/cart/items', { courseId: course.id }).catch((err) => {
-        if (err.code === 'already-in-cart') return;
-        setCartIds((prev) => prev.filter((id) => id !== course.id));
-        reportError('Not added to cart', err);
-      });
     },
-    [user, requestLogin, purchasedCourseIds, cartIds, showToast, reportError]
+    [user, requestLogin, purchasedCourseIds, cartIds, showToast]
   );
   const removeFromCart = useCallback((courseId) => {
     setCartIds((prev) => prev.filter((id) => id !== courseId));
-    del(`/cart/items/${enc(courseId)}`).catch((err) => {
-      setCartIds((prev) => (prev.includes(courseId) ? prev : [...prev, courseId]));
-      reportError('Not removed from cart', err);
-    });
-  }, [reportError]);
-  const clearCart = useCallback(() => {
-    setCartIds([]);
-    del('/cart').catch((err) => reportError('Cart not cleared', err));
-  }, [reportError]);
+  }, []);
+  const clearCart = useCallback(() => setCartIds([]), []);
 
   // ── Progress & notes ──────────────────────────────────────
   const [courseProgress, setCourseProgress] = useState(() => initialData?.progress || {});
@@ -256,22 +246,12 @@ export const AppProvider = ({ children }) => {
         return { ...prev, [courseId]: { ...c, completedLessons: [...c.completedLessons, lessonId] } };
       });
       logEvent('lesson_completed', { courseId, lessonId });
-      put(`/progress/${enc(courseId)}/lessons/${enc(lessonId)}/complete`).catch((err) => {
-        setCourseProgress((prev) => {
-          const c = prev[courseId];
-          return c ? { ...prev, [courseId]: { ...c, completedLessons: c.completedLessons.filter((id) => id !== lessonId) } } : prev;
-        });
-        reportError('Progress not saved', err);
-      });
       return true;
     },
-    [logEvent, reportError]
+    [logEvent]
   );
 
   const setLastLesson = useCallback((courseId, lessonId) => {
-    if (progressRef.current[courseId]?.lastLessonId !== lessonId) {
-      put(`/progress/${enc(courseId)}/last-lesson`, { lessonId }).catch(() => { /* only a resume hint */ });
-    }
     setCourseProgress((prev) => {
       const c = prev[courseId] || { completedLessons: [], notes: {} };
       if (c.lastLessonId === lessonId) return prev;
@@ -287,9 +267,8 @@ export const AppProvider = ({ children }) => {
         return { ...prev, [courseId]: { ...c, notes: { ...c.notes, [lessonId]: text } } };
       });
       if (previous === undefined && text.trim()) logEvent('note_created', { courseId, lessonId });
-      put(`/progress/${enc(courseId)}/lessons/${enc(lessonId)}/notes`, { text }).catch((err) => reportError('Notes not saved', err));
     },
-    [logEvent, reportError]
+    [logEvent]
   );
 
   // Timestamped notes and bookmarks ("keyframes") per lesson
@@ -301,21 +280,12 @@ export const AppProvider = ({ children }) => {
       });
       if (added === 'note') logEvent('note_created', { courseId, lessonId });
       if (added === 'bookmark') logEvent('bookmark_added', { courseId, lessonId });
-      const clean = (marks || []).map((m) => ({
-        id: String(m.id),
-        kind: m.kind === 'bookmark' ? 'bookmark' : 'note',
-        time: typeof m.time === 'number' ? m.time : null,
-        text: String(m.text || ''),
-        tags: Array.isArray(m.tags) ? m.tags : [],
-        ...(m.createdAt ? { createdAt: m.createdAt } : {})
-      }));
-      put(`/progress/${enc(courseId)}/lessons/${enc(lessonId)}/marks`, { marks: clean }).catch((err) => reportError('Notes not saved', err));
     },
-    [logEvent, reportError]
+    [logEvent]
   );
 
   // ── Checkout & enrollment celebration ─────────────────────
-  const [checkoutModal, setCheckoutModal] = useState({ isOpen: false, step: 'verify', items: [], totalPrice: 0, idempotencyKey: '' });
+  const [checkoutModal, setCheckoutModal] = useState({ isOpen: false, items: [], totalPrice: 0, idempotencyKey: '' });
   const [celebration, setCelebration] = useState(null); // { courseIds: [...] } — only for new enrolments
 
   const startPurchaseFlow = useCallback(
@@ -333,74 +303,65 @@ export const AppProvider = ({ children }) => {
         return;
       }
       // One key per checkout: a retried or double-clicked payment creates one order.
-      setCheckoutModal({ isOpen: true, step: 'verify', items, totalPrice: items.reduce((s, c) => s + c.price, 0), idempotencyKey: newKey() });
+      setCheckoutModal({ isOpen: true, items, totalPrice: items.reduce((s, c) => s + c.price, 0), idempotencyKey: newKey() });
     },
     [user, requestLogin, purchasedCourseIds, showToast]
   );
 
   const closeCheckoutModal = useCallback(() => {
-    setCheckoutModal({ isOpen: false, step: 'verify', items: [], totalPrice: 0, idempotencyKey: '' });
+    setCheckoutModal({ isOpen: false, items: [], totalPrice: 0, idempotencyKey: '' });
   }, []);
 
   /**
-   * Places the order on the server, which prices it from its own catalogue.
-   * Resolves true on success; on failure shows why and resolves false.
+   * Places the order locally (prototype checkout: no payment is taken).
+   * Resolves true on success.
    */
   const completePurchase = useCallback(async ({ method = 'card' } = {}) => {
-    const { items, idempotencyKey } = checkoutModal;
-    let result;
-    try {
-      result = await post('/orders', { courseIds: items.map((c) => c.id), paymentMethod: method, idempotencyKey });
-    } catch (err) {
-      if (err.code === 'already-enrolled') {
-        showToast('Already enrolled', 'You already have access to these courses.');
-        closeCheckoutModal();
-      } else {
-        reportError('Payment not completed', err);
-      }
+    const { items } = checkoutModal;
+    const buying = items.filter((c) => !purchasedCourseIds.includes(c.id));
+    if (!buying.length) {
+      showToast('Already enrolled', 'You already have access to these courses.');
+      closeCheckoutModal();
       return false;
     }
-    const { order, enrolledCourseIds } = result;
-    const newIds = enrolledCourseIds.filter((id) => !purchasedCourseIds.includes(id));
-    const orderedIds = order.items.map((i) => i.courseId);
-    setPurchasedCourseIds((prev) => Array.from(new Set([...prev, ...enrolledCourseIds])));
-    setCartIds((prev) => prev.filter((id) => !orderedIds.includes(id) && !items.some((c) => c.id === id)));
+    const at = Date.now();
+    const newIds = buying.map((c) => c.id);
+    setPurchasedCourseIds((prev) => Array.from(new Set([...prev, ...newIds])));
+    setCartIds((prev) => prev.filter((id) => !items.some((c) => c.id === id)));
     newIds.forEach((courseId) => logEvent('enrolled', { courseId }));
     closeCheckoutModal();
-    if (newIds.length) {
-      const at = new Date(order.createdAt).getTime();
-      setCelebration({
-        courseIds: newIds,
-        at,
-        paid: order.total,
-        order: order.orderNumber,
-        transactionId: order.transactionId,
-        method: order.paymentMethodLabel,
-        quote: pickQuote(at),
-        customer: { name: profile.name, email: profile.email, firstName: profile.firstName }
-      });
-    }
+    setCelebration({
+      courseIds: newIds,
+      at,
+      paid: buying.reduce((s, c) => s + c.price, 0),
+      order: `MNK-${at.toString(36).toUpperCase().slice(-6)}${randomCode(3)}`,
+      transactionId: `TXN${at.toString().slice(-8)}${randomCode(8)}`,
+      method: PAYMENT_METHODS[method] || method,
+      quote: pickQuote(at),
+      customer: { name: profile.name, email: profile.email, firstName: profile.firstName }
+    });
     return true;
-  }, [checkoutModal, purchasedCourseIds, logEvent, closeCheckoutModal, profile, showToast, reportError]);
+  }, [checkoutModal, purchasedCourseIds, logEvent, closeCheckoutModal, profile, showToast]);
 
   const dismissCelebration = useCallback(() => setCelebration(null), []);
 
   // ── Reset ─────────────────────────────────────────────────
   // Clears only the signed-in account's saved data; the account itself stays.
   const resetAllDemoData = useCallback(async () => {
-    try {
-      await del('/users/me/learning-data');
-    } catch (err) {
-      reportError('Data not reset', err);
-      return;
-    }
-    resetUserData();
+    if (!user) return;
+    clearState(user.id);
+    hydrateUserData(EMPTY_STATE, user.id);
     setPurchasedCourseIds(DEFAULT_OWNED);
     setCartIds([]);
     setCourseProgress({});
     setActivity({ days: {}, events: [] });
     showToast('Data reset', 'Enrolments, progress and notes were cleared.');
-  }, [showToast, reportError]);
+  }, [user, showToast]);
+
+  // ── Save to this browser ──────────────────────────────────
+  useEffect(() => {
+    if (user) saveState(user.id, { purchasedCourseIds, cartCourseIds: cartIds, progress: courseProgress, activity });
+  }, [user, purchasedCourseIds, cartIds, courseProgress, activity]);
 
   const value = {
     user,

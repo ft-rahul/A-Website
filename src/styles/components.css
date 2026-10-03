@@ -316,6 +316,33 @@
   transition: transform var(--pill-dur) var(--pill-ease);
 }
 .nav-pill.is-cart:hover .count-badge { transform: scale(1.08); }
+.nav-pill.is-cart .count-badge { animation: badgePop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s both; }
+@keyframes badgePop { from { transform: scale(0); } }
+
+/* Cart icon: empty outline vs. a tinted bag holding a course book */
+.cart-icon { overflow: visible; }
+.cart-icon .cart-bag { fill: transparent; transition: fill 0.3s ease; }
+.cart-icon.is-full .cart-bag { fill: color-mix(in srgb, currentColor 16%, transparent); }
+.cart-book rect { fill: var(--brand-primary); stroke: var(--brand-primary); stroke-width: 1.4; }
+.cart-book path { stroke: var(--brand-contrast); stroke-width: 1.2; }
+.nav-pill.is-cart:is(:hover, :focus-visible) .cart-book rect { fill: currentColor; stroke: currentColor; }
+.nav-pill.is-cart:is(:hover, :focus-visible) .cart-book path { stroke: var(--brand-primary); }
+.cart-book.is-dropping { animation: cartDrop 0.5s cubic-bezier(0.5, 0, 0.75, 0) both; }
+@keyframes cartDrop {
+  from { transform: translateY(-11px); opacity: 0; }
+  40% { opacity: 1; }
+  to { transform: none; opacity: 1; }
+}
+.cart-bounce { transform-origin: 12px 21px; animation: cartBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.45s both; }
+@keyframes cartBounce {
+  0% { transform: scale(1, 1); }
+  25% { transform: scale(1.18, 0.78); }
+  55% { transform: scale(0.92, 1.12) translateY(-1.5px); }
+  100% { transform: scale(1, 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cart-book.is-dropping, .cart-bounce, .nav-pill.is-cart .count-badge { animation: none; }
+}
 
 .nav-pill.is-profile {
   padding: 0;
@@ -471,7 +498,6 @@
   gap: 1rem;
   padding: var(--space-5) var(--space-5) 0;
 }
-.modal-step { font-size: 0.72rem; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.25rem; }
 .modal-title { font-size: 1.6rem; }
 .modal-body { padding: var(--space-5); }
 
@@ -481,21 +507,6 @@
 .checkout-items .course-mark { color: var(--text-primary); }
 .checkout-item-title { flex: 1; font-weight: 550; }
 
-.verify { border: 0; }
-.verify legend { font-weight: 550; margin-bottom: var(--space-3); color: var(--text-primary); }
-.verify-options { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-.verify-option {
-  padding: 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-.verify-option:hover { border-color: var(--text-muted); }
-.verify-option.is-right { border-color: var(--accent-emerald); background: var(--accent-emerald-light); }
-.verify-option.is-wrong { border-color: var(--accent-rose); background: var(--accent-rose-light); animation: shake 0.3s; }
-.verify-hint { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.75rem; font-size: 0.85rem; color: var(--accent-rose); }
 
 .notice { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.75rem; border-radius: var(--radius-sm); background: var(--bg-tertiary); font-size: 0.85rem; margin-bottom: var(--space-4); }
 .notice svg { flex-shrink: 0; margin-top: 2px; color: var(--accent-emerald); }
@@ -516,8 +527,7 @@
 .pay-slide .slide-commit { display: block; }
 
 @media (max-width: 420px) {
-  .verify-options { grid-template-columns: 1fr; }
-}
+  }
 
 /* ── Payment confirmation (quiet, receipt-like) ───────────── */
 .modal.paid {

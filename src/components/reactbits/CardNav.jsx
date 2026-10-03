@@ -130,6 +130,7 @@ const CardNav = ({
           >
             <span className="hamburger-line" />
             <span className="hamburger-line" />
+            <span className="hamburger-line" />
           </button>
 
           <div className="card-nav-title">{title}</div>

@@ -1,16 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, KeyRound, Square, Sparkles, Trash2, Wrench, X } from 'lucide-react';
 import { storage } from '../lib/storage';
-import { get, streamRequest } from '../lib/api';
 import { Markdown } from '../lib/markdown';
 import { usePrefersReducedMotion } from '../hooks/useMediaQuery';
 
 /*
  * Tutor assistant.
- * When the Monklogy server has a Claude key configured, answers stream through
- * the API (POST /api/assistant/chat): the key and the tutor's instructions stay
- * on the server, with a per-learner daily limit. Otherwise a learner can use
- * their own Anthropic API key, called directly from the browser. Without either it falls back to an offline
+ * A learner can use their own Anthropic API key, called directly from the
+ * browser. Without either it falls back to an offline
  * helper that only rearranges what the app already knows (diagnostics, the line
  * explainer, the lesson's key points), and is labelled as not being AI.
  */
@@ -91,27 +88,6 @@ const classify = (text) => {
   return 'line';
 };
 
-/** Reads a server-sent-events body and calls onEvent for every JSON event. */
-const readEvents = async (res, onEvent) => {
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf('\n\n')) >= 0) {
-      const chunk = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      const data = chunk.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('');
-      if (data) {
-        try { onEvent(JSON.parse(data)); } catch { /* ignore a malformed event */ }
-      }
-    }
-  }
-};
-
 const describeError = (Anthropic, err) => {
   if (err instanceof Anthropic.AuthenticationError) return { text: 'Anthropic rejected this API key. Check it and enter it again.', resetKey: true };
   if (err instanceof Anthropic.PermissionDeniedError) return { text: 'This API key is not allowed to use this model.' };
@@ -157,14 +133,6 @@ const TypedReply = ({ turn, onTick }) => {
 
 export const AssistantPanel = ({ threadKey, getContext, offline }) => {
   const [apiKey, setApiKey] = useState(() => storage.getAccount(KEY_STORE, ''));
-  // { enabled, model, dailyLimit, usedToday } from the server, or null while unknown
-  const [server, setServer] = useState(null);
-  useEffect(() => {
-    let live = true;
-    get('/assistant/status').then((s) => { if (live) setServer(s); }).catch(() => { if (live) setServer({ enabled: false }); });
-    return () => { live = false; };
-  }, []);
-  const useServer = Boolean(server?.enabled);
   const [keyDraft, setKeyDraft] = useState('');
   const [showKeyForm, setShowKeyForm] = useState(false);
   // threads[threadKey] = { history: API messages (append-only), view: rendered turns }
@@ -211,10 +179,6 @@ export const AssistantPanel = ({ threadKey, getContext, offline }) => {
     pushView({ role: 'user', text: q, chip: `${ctx.fileName} · line ${ctx.cursorLine}` });
 
     stick.current = true;
-    if (useServer) {
-      await askServer(q, ctx);
-      return;
-    }
     if (!apiKey) {
       const turn = pushView({ role: 'offline', text: '' });
       const text = offlineReply(kind || classify(q), ctx, offline());
@@ -276,59 +240,6 @@ export const AssistantPanel = ({ threadKey, getContext, offline }) => {
     }
   };
 
-  // Streams through the Monklogy API, which holds the Claude key.
-  const askServer = async (q, ctx) => {
-    const answer = pushView({ role: 'assistant', text: '', streaming: true });
-    setBusy(true);
-    const controller = new AbortController();
-    streamRef.current = controller;
-    let finished = false;
-    try {
-      const res = await streamRequest('/assistant/chat', { history: thread.history, workspace: workspaceBlock(ctx), question: q }, controller.signal);
-      await readEvents(res, (e) => {
-        if (e.type === 'delta') {
-          answer.text += e.text;
-          rerender();
-        } else if (e.type === 'done') {
-          finished = true;
-          answer.streaming = false;
-          if (e.stopReason === 'refusal') {
-            answer.role = 'notice';
-            answer.text = 'Claude declined to answer this one. Try rephrasing the question about your code.';
-          } else {
-            // Append-only: the exact content returned (including thinking blocks) goes back next turn.
-            thread.history.push(e.userMessage, { role: 'assistant', content: e.content });
-            answer.text = e.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n\n') || answer.text;
-            if (e.stopReason === 'max_tokens') answer.text += '\n\n_(The answer hit the length limit.)_';
-          }
-          setServer((s) => (s ? { ...s, usedToday: (s.usedToday || 0) + 1 } : s));
-        } else if (e.type === 'error') {
-          finished = true;
-          answer.streaming = false;
-          answer.role = 'notice';
-          answer.text = e.message;
-        }
-      });
-      if (!finished) {
-        answer.streaming = false;
-        if (!answer.text) { answer.role = 'notice'; answer.text = 'The answer was cut off. Try again.'; }
-      }
-    } catch (err) {
-      answer.streaming = false;
-      if (err?.name === 'AbortError') {
-        answer.stopped = true;
-        if (!answer.text) answer.text = '_Stopped._';
-      } else {
-        answer.role = 'notice';
-        answer.text = err?.message || 'Could not reach the tutor. Try again.';
-      }
-    } finally {
-      streamRef.current = null;
-      setBusy(false);
-      rerender();
-    }
-  };
-
   const clear = () => {
     streamRef.current?.abort();
     threads.current[threadKey] = { history: [], view: [] };
@@ -338,11 +249,7 @@ export const AssistantPanel = ({ threadKey, getContext, offline }) => {
   return (
     <div className="ai">
       <div className="ai-status">
-        {useServer ? (
-          <span className="ai-badge is-live" title={server.dailyLimit ? `${Math.max(0, server.dailyLimit - (server.usedToday || 0))} questions left today` : undefined}>
-            <Sparkles size={12} /> Claude · {server.model}
-          </span>
-        ) : apiKey ? (
+        {apiKey ? (
           <>
             <span className="ai-badge is-live"><Sparkles size={12} /> Claude · {MODEL}</span>
             <button className="ai-link" onClick={forgetKey}>Forget key</button>
@@ -358,14 +265,14 @@ export const AssistantPanel = ({ threadKey, getContext, offline }) => {
         )}
       </div>
 
-      {showKeyForm && !apiKey && !useServer && (
+      {showKeyForm && !apiKey && (
         <form className="ai-keyform" onSubmit={saveKey}>
           <div className="ai-keyform-head">
             <strong>Use your Anthropic API key</strong>
             <button type="button" className="icon-btn is-quiet" onClick={() => setShowKeyForm(false)} aria-label="Close"><X size={14} /></button>
           </div>
           <p>
-            The Monklogy server has no Claude key configured, so requests go straight from this browser to Anthropic with your key. It is stored in
+            Requests go straight from this browser to Anthropic with your key. It is stored in
             this browser’s local storage only — use a key with a spending limit, and don’t use this on a shared computer.
           </p>
           <div className="ai-keyform-row">

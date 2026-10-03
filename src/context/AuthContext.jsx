@@ -1,21 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as auth from '../lib/auth';
-import { setSessionEndHandler } from '../lib/api';
 import { hydrateUserData, resetUserData } from '../lib/userData';
 import { routeToPath } from '../lib/router';
+import { EMPTY_STATE } from '../lib/localDb';
 
 const AuthContext = createContext(null);
 
 // Screens a guest may open. Everything else asks them to log in first.
 export const PUBLIC_ROUTES = new Set(['lobby', 'not-found']);
 
-const EMPTY_STATE = { purchasedCourseIds: [], cartCourseIds: [], progress: {}, activity: { days: {}, events: [] }, code: {}, playback: {} };
-
 /**
  * Who is signed in, plus the login dialog.
- * On load the session is restored from the httpOnly refresh cookie. The
- * learner's saved state (enrolments, cart, progress...) is fetched before the
- * app below mounts, so screens never flash empty data. The app is re-mounted
+ * On load the session is restored from localStorage. The learner's saved
+ * state (enrolments, cart, progress...) is loaded before the app below mounts, so screens never flash empty data. The app is re-mounted
  * per user (see main.jsx).
  */
 export const AuthProvider = ({ children }) => {
@@ -26,12 +23,12 @@ export const AuthProvider = ({ children }) => {
   // A message for the freshly mounted app to show once (e.g. "Welcome back").
   const greeting = useRef(null);
   const setGreeting = (g) => { greeting.current = g; };
-  // Server state handed to AppProvider when it mounts.
+  // Saved state handed to AppProvider when it mounts.
   const initialState = useRef(EMPTY_STATE);
 
   const adopt = useCallback((u, state) => {
     initialState.current = state || EMPTY_STATE;
-    hydrateUserData(state);
+    hydrateUserData(state, u?.id);
     setUser(u);
   }, []);
 
@@ -40,9 +37,6 @@ export const AuthProvider = ({ children }) => {
     let live = true;
     auth.restoreSession()
       .then((r) => { if (live && r) adopt(r.user, r.state); })
-      .catch(() => {
-        if (live) setGreeting({ title: 'Offline', message: 'Could not reach Monklogy. Some features are unavailable.', type: 'error' });
-      })
       .finally(() => { if (live) setStatus('ready'); });
     return () => { live = false; };
   }, [adopt]);
@@ -54,19 +48,6 @@ export const AuthProvider = ({ children }) => {
     setPrompt({ open: true, mode: 'signup', reason, next });
   }, []);
   const closeLogin = useCallback(() => setPrompt((p) => ({ ...p, open: false, next: null })), []);
-
-  // The refresh token expired or was revoked while the app was open.
-  useEffect(() => {
-    setSessionEndHandler(() => {
-      resetUserData();
-      initialState.current = EMPTY_STATE;
-      setUser((u) => {
-        if (u) setGreeting({ title: 'Session ended', message: 'Log in again to continue.', type: 'info' });
-        return null;
-      });
-    });
-    return () => setSessionEndHandler(null);
-  }, []);
 
   // After signing in, land on whatever the guest was trying to open.
   const enter = useCallback(
@@ -106,7 +87,7 @@ export const AuthProvider = ({ children }) => {
   /** Throws on failure so the caller can tell the learner. */
   const updateName = useCallback(async (firstName, lastName) => {
     if (!user) return;
-    const u = await auth.updateNames(firstName, lastName);
+    const u = await auth.updateNames(user.id, firstName, lastName);
     if (u) setUser(u);
   }, [user]);
 

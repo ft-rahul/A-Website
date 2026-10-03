@@ -1,7 +1,5 @@
 # Builds the site and publishes it to GitHub Pages on every push to main.
 # One-time setup: repo Settings > Pages > Source: "GitHub Actions".
-# Optional: Settings > Secrets and variables > Actions > Variables > VITE_API_URL
-#   = your hosted backend, e.g. https://monklogy-api.onrender.com/api
 name: Deploy to GitHub Pages
 
 on:
@@ -29,8 +27,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build -- --base=/${{ github.event.repository.name }}/
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
       # Pages has no rewrites, so deep links fall back to the app through 404.html.
       - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3

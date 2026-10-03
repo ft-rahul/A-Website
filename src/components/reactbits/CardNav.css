@@ -39,7 +39,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  gap: 6px;
+  gap: 3.5px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -57,8 +57,8 @@
 
 .hamburger-line {
   display: block;
-  width: 22px;
-  height: 2px;
+  width: 16px;
+  height: 1.5px;
   border-radius: 2px;
   background-color: currentColor;
   transition:
@@ -69,11 +69,16 @@
 }
 
 .hamburger-menu.open .hamburger-line:first-child {
-  transform: translateY(4px) rotate(45deg);
+  transform: translateY(5px) rotate(45deg);
+}
+
+.hamburger-menu.open .hamburger-line:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0.4);
 }
 
 .hamburger-menu.open .hamburger-line:last-child {
-  transform: translateY(-4px) rotate(-45deg);
+  transform: translateY(-5px) rotate(-45deg);
 }
 
 .card-nav-title {

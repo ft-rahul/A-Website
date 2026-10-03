@@ -1,81 +1,52 @@
-// Account calls. Accounts live on the Monklogy API (see ../monklogy-backend);
-// passwords are hashed there with argon2id and never stored in this browser.
-import { ApiError, clearAccess, get, patch, post, refreshSession, setAccess } from './api';
+// Account calls. Accounts live in this browser's localStorage (see localDb.js).
+import * as db from './localDb';
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const MIN_PASSWORD = 8;
 
 const normalise = (email) => String(email || '').trim().toLowerCase();
 
-const failure = (err, fallback) => ({
-  ok: false,
-  code: err instanceof ApiError ? err.code : 'error',
-  error: (err instanceof ApiError && err.details?.[0]) || err?.message || fallback
-});
+const failure = (code, error) => ({ ok: false, code, error });
 
-/** Whether an account exists for this email. Throws on network errors. */
-export const accountExists = async (email) => {
-  const r = await post('/auth/email-status', { email: normalise(email) }, { auth: false });
-  return Boolean(r?.exists);
+const startSession = (user) => {
+  db.setCurrentUser(user.id);
+  return { ok: true, user, state: db.loadState(user.id) };
 };
 
-/** Everything the app shows for a signed-in learner, in one request. */
-export const loadState = () => get('/me/state');
+/** Whether an account exists for this email. */
+export const accountExists = async (email) => Boolean(db.findUser(normalise(email)));
 
-// The first restore is shared, so React StrictMode's double effects and
-// parallel callers do not rotate the refresh cookie twice.
-let restoring = null;
-/** Resumes the session from the refresh cookie. Resolves to { user, state } or null. */
-export const restoreSession = () => {
-  if (!restoring) {
-    restoring = (async () => {
-      const session = await refreshSession();
-      if (!session) return null;
-      const state = await loadState();
-      return { user: state.user, state };
-    })().finally(() => { setTimeout(() => { restoring = null; }, 0); });
-  }
-  return restoring;
-};
-
-const startSession = async (data) => {
-  setAccess(data);
-  const state = await loadState();
-  return { ok: true, user: state.user, state };
+/** Resumes the saved session. Resolves to { user, state } or null. */
+export const restoreSession = async () => {
+  const user = db.getCurrentUser();
+  return user ? { user, state: db.loadState(user.id) } : null;
 };
 
 export const signIn = async (email, password) => {
+  const key = normalise(email);
+  if (!db.findUser(key)) return failure('no-account', 'You don’t have an account on Monklogy yet. Sign up first to continue.');
   try {
-    return await startSession(await post('/auth/login', { email: normalise(email), password }, { auth: false }));
-  } catch (err) {
-    return failure(err, 'Could not log in. Try again.');
+    const user = await db.checkPassword(key, password);
+    if (!user) return failure('invalid-credentials', 'That password is not right. Try again.');
+    return startSession(user);
+  } catch {
+    return failure('error', 'Could not log in. Try again.');
   }
 };
 
 export const signUp = async ({ email, password, firstName, lastName }) => {
+  const key = normalise(email);
+  if (db.findUser(key)) return failure('exists', 'An account with this email already exists. Log in instead.');
   try {
-    return await startSession(await post('/auth/register', {
-      email: normalise(email),
-      password,
-      firstName: firstName.trim(),
-      lastName: lastName.trim()
-    }, { auth: false }));
-  } catch (err) {
-    return failure(err, 'Could not create your account. Try again.');
+    return startSession(await db.createUser({ email: key, password, firstName: firstName.trim(), lastName: lastName.trim() }));
+  } catch {
+    return failure('error', 'Could not create your account. Try again.');
   }
 };
 
-export const updateNames = async (firstName, lastName) => {
-  const r = await patch('/users/me', { firstName: firstName.trim().slice(0, 30), lastName: lastName.trim().slice(0, 30) });
-  return r.user;
-};
+export const updateNames = async (id, firstName, lastName) =>
+  db.updateUser(id, { firstName: firstName.trim().slice(0, 30), lastName: lastName.trim().slice(0, 30) });
 
 export const signOut = async () => {
-  try {
-    await post('/auth/logout', undefined, { auth: false });
-  } catch {
-    /* the local session ends either way */
-  } finally {
-    clearAccess();
-  }
+  db.setCurrentUser(null);
 };

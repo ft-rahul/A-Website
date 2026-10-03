@@ -3,7 +3,7 @@ import { formatPrice } from '../lib/money';
 import {
   ArrowLeft, PanelLeft, ChevronLeft, ChevronRight, CheckCircle2, Check, Lock, Play, RotateCcw,
   Film, PlayCircle, Terminal, BookOpen, ArrowRight, Sparkles, Cpu, NotebookPen, X, ChevronDown, ChevronUp, MonitorPlay,
-  Trash2, Info, BookmarkPlus, Maximize2, Minimize2
+  Trash2, Info, BookmarkPlus, Maximize2, Minimize2, Route
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getCourse, getCurriculum, summarizeProgress } from '../data/catalog';
@@ -24,6 +24,7 @@ import { NotesDrawer } from '../components/NotesDrawer';
 import CardNav from '../components/reactbits/CardNav';
 import { AssistantPanel } from '../components/AssistantPanel';
 import { BtsSimulation, hasSimulation } from '../components/BtsSimulation';
+import { CourseRoadmap } from '../components/CourseRoadmap';
 
 const READ_MODE_REASON = {
   java: 'Java is compiled and runs on the JVM, which is not available in the browser.',
@@ -178,8 +179,11 @@ const Workspace = ({ course }) => {
   useEffect(() => { if (!narrow) storage.set('lessons_open', sideOpen); }, [sideOpen, narrow]);
   const mainRef = useRef(null);
 
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
+
   const goTo = (l) => {
     if (!l) return;
+    setRoadmapOpen(false);
     setLessonId(l.id);
     navigateTo('tutor', { courseId: course.id, lessonId: l.id }, { scroll: false });
     if (narrow) setSideOpen(false);
@@ -786,6 +790,10 @@ const Workspace = ({ course }) => {
           </div>
         </div>
         <div className="tutor-top-right">
+          <button className="btn btn-sm btn-secondary tutor-roadmap-btn" onClick={() => setRoadmapOpen(true)} aria-haspopup="dialog">
+            <Route size={15} />
+            <span>Roadmap</span>
+          </button>
           <ThemeSwitch value={tutorTheme} onChange={changeTheme} label="Dark Tutor theme" />
           <div className="tutor-nav">
             <button className="icon-btn" onClick={() => goTo(prev)} disabled={!prev} aria-label={prev ? `Previous lesson: ${prev.title}` : 'No previous lesson'}>
@@ -837,6 +845,18 @@ const Workspace = ({ course }) => {
         </div>
       </header>
 
+      <CourseRoadmap
+        open={roadmapOpen}
+        onClose={() => setRoadmapOpen(false)}
+        course={course}
+        modules={modules}
+        completed={completed}
+        current={summary.current}
+        owned={owned}
+        theme={tutorTheme}
+        onOpenLesson={goTo}
+      />
+
       <div className="tutor-body">
         <aside id="tutor-lessons" className={`tutor-side ${sideOpen ? 'is-open' : ''}`} aria-label="Lessons" aria-hidden={!sideOpen}>
           <div className="tutor-side-head">
@@ -846,7 +866,10 @@ const Workspace = ({ course }) => {
               {owned ? (
                 <>
                   <div className="meter is-thin"><span style={{ width: `${summary.percent}%` }} /></div>
-                  <div className="tutor-side-meta">{summary.completed} of {summary.total} lessons done</div>
+                  <div className="tutor-side-meta">
+                    {summary.completed} of {summary.total} lessons done ·{' '}
+                    <button className="tutor-side-link" onClick={() => setRoadmapOpen(true)} tabIndex={sideOpen ? 0 : -1}>See roadmap</button>
+                  </div>
                 </>
               ) : (
                 <div className="tutor-side-meta mono">Preview — enrol to unlock all lessons</div>

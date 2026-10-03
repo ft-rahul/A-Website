@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Sun, Moon, Menu, X, LogOut } from 'lucide-react';
+import { Sun, Moon, Menu, X, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from './Logo';
+import { CartIcon } from './CartIcon';
 import { BASE } from '../lib/router';
 
 const NAV = [
@@ -101,9 +102,9 @@ export const Navbar = () => {
             onClick={() => go('cart')}
             aria-label={`Cart${cart.length ? `, ${cart.length} item${cart.length > 1 ? 's' : ''}` : ''}`}
           >
-            <span className="nav-pill-icon"><ShoppingBag size={16} /></span>
+            <span className="nav-pill-icon"><CartIcon count={cart.length} /></span>
             <span className="nav-pill-label" aria-hidden="true"><span>My cart</span></span>
-            {cart.length > 0 && <span className="count-badge">{cart.length}</span>}
+            {cart.length > 0 && <span key={cart.length} className="count-badge">{cart.length}</span>}
           </button>
           <button
             className={`nav-pill is-profile ${currentRoute === 'profile' ? 'is-active' : ''}`}

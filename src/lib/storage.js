@@ -1,7 +1,7 @@
 // Safe localStorage helpers. Storage can throw (private mode, blocked
 // site data), so every access is guarded and falls back to a default.
-// Only device preferences live here (theme, layout, player settings, a
-// learner's own Anthropic key). Accounts and learning data live on the API.
+// Everything the site saves lives here: device preferences, accounts and
+// learning data (see localDb.js).
 
 const PREFIX = 'monklogy_';
 

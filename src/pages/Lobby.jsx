@@ -9,6 +9,9 @@ import { TechMorph } from '../components/TechMorph';
 import { CourseMark } from '../components/CourseMark';
 import { Reveal } from '../components/Reveal';
 import { LiveWorkspaceDemo } from '../components/LiveWorkspaceDemo';
+import { ProblemSection } from '../components/ProblemSection';
+import { ProgressionSection } from '../components/ProgressionSection';
+import { EarlyAccess } from '../components/EarlyAccess';
 
 const FREE_LESSON = { courseId: 'javascript-in-depth', lessonId: 'js-01' };
 
@@ -53,8 +56,8 @@ const Hero = ({ onBrowse, onTry }) => {
           <div className="hero-copy">
             <p className="eyebrow is-accent hero-in" style={{ '--i': 0 }}>Monklogy · Coding courses, starting from zero</p>
             <h1 id="hero-title" className="hero-title">
-              <span className="hero-in" style={{ '--i': 1 }}>Learn to code by</span>{' '}
-              <em className="display-em hero-in" style={{ '--i': 2 }}>understanding it.</em>
+              <span className="hero-line hero-in" style={{ '--i': 1 }}>Learn to code by</span>{' '}
+              <em className="hero-line display-em hero-in" style={{ '--i': 2 }}>understanding it.</em>
             </h1>
             <p className="hero-lede hero-in" style={{ '--i': 3 }}>
               Most people quit coding because tutorials show them what to type, but never why it works. Here you watch a
@@ -304,11 +307,14 @@ export const Lobby = () => {
   return (
     <div className="lobby">
       <Hero onBrowse={onBrowse} onTry={onTry} />
+      <ProblemSection />
       <Promises navigateTo={navigateTo} />
       <TechBand />
       <WalkWithYou />
       <Workspace />
+      <ProgressionSection />
       <Principles />
+      <EarlyAccess onExplore={onBrowse} />
       <Faq />
       <FinalCta onBrowse={onBrowse} onTry={onTry} />
     </div>

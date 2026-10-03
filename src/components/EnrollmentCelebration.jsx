@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { formatPrice, formatPriceExact } from '../lib/money';
 import { ArrowRight, X, Download, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -6,6 +6,13 @@ import { getCourse, getCurriculum } from '../data/catalog';
 import { downloadReceipt } from '../lib/receipt';
 import { Modal } from './Modal';
 import { CourseMark } from './CourseMark';
+import successSound from '../assets/sounds/payment-success.aac';
+
+// Loaded up front so the sound is ready the moment a payment goes through.
+const successAudio = new Audio(successSound);
+successAudio.preload = 'auto';
+successAudio.volume = 0.6;
+const BALL_LANDS_MS = 400;
 
 /**
  * Payment confirmation.
@@ -15,6 +22,20 @@ import { CourseMark } from './CourseMark';
 export const EnrollmentCelebration = () => {
   const { celebration, dismissCelebration, navigateTo } = useApp();
   const [saved, setSaved] = useState(false);
+
+  // Play the success whoosh as the ball lands (42% of the 0.95s ballDrop), so its
+  // peak meets the burst. The pay click has already given the page user activation.
+  useEffect(() => {
+    if (!celebration) return;
+    const timer = setTimeout(() => {
+      successAudio.currentTime = 0;
+      successAudio.play().catch(() => {});
+    }, BALL_LANDS_MS);
+    return () => {
+      clearTimeout(timer);
+      successAudio.pause();
+    };
+  }, [celebration?.at]);
 
   if (!celebration) return null;
   const enrolled = celebration.courseIds.map(getCourse).filter(Boolean);
